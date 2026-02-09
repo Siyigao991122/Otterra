@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
 const DESIGN_STYLES = [
   "modern",
@@ -150,7 +149,7 @@ export default function CreatePage() {
                   placeholder="your@email.com"
                 />
                 <p className="text-sm text-gray-500 mt-1">
-                  We'll send you the results (optional)
+                  We&apos;ll send you the results (optional)
                 </p>
               </div>
 
