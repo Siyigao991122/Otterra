@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Sparkles } from "lucide-react"
 
 const ROLES = [
-  { value: "", label: "Select your role (optional)" },
+  { value: "", label: "Select your role" },
   { value: "renter", label: "Renter" },
   { value: "designer", label: "Designer" },
   { value: "agent", label: "Agent" },
@@ -111,7 +111,7 @@ export function WaitlistForm({ refParam }: WaitlistFormProps) {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="name">Name (optional)</Label>
+                  <Label htmlFor="name">Name</Label>
                   <Input
                     id="name"
                     type="text"
@@ -123,7 +123,7 @@ export function WaitlistForm({ refParam }: WaitlistFormProps) {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="role">Role (optional)</Label>
+                  <Label htmlFor="role">Role</Label>
                   <select
                     id="role"
                     value={role}

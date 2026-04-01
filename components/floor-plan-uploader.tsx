@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-
+import { useRouter } from "next/navigation"
 import { useState, useCallback } from "react"
 import { useDropzone } from "react-dropzone"
 import { Button } from "@/components/ui/button"
@@ -21,15 +21,51 @@ import {
   Pencil,
   X,
 } from "lucide-react"
-import type { RoomDimensions, FloorPlanAnalysis, DetectedRoom } from "@/lib/types"
+import type { RoomDimensions, FloorPlanAnalysis, DetectedRoom, FloorplanPoint2D } from "@/lib/types"
+import { isValidFootprintPolygon, polygonAABB } from "@/lib/floorplanGeometry"
+import {
+  persistRoomDimensionsToSession,
+  clearRoomDimensionsSession,
+} from "@/lib/roomDimensionsSession"
 
 interface FloorPlanUploaderProps {
   onUpload: (dimensions: RoomDimensions) => void
+  onEnterRoom?: () => void
 }
 
 type UploadStep = "upload" | "analyzing" | "review"
 
-export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
+/** Width/depth/height last applied from analysis or room selection (not from user input). */
+type AnalysisSyncedDims = Pick<RoomDimensions, "width" | "depth" | "height">
+
+const DIM_EPS = 0.001
+
+/**
+ * Dimensions that describe the whole unit for Generate (Phase 1 unit-first).
+ * Prefer footprint polygon AABB when geometry is valid — best match to outer shell.
+ * Otherwise use model totals. Ceiling height = max of detected room ceilings (typical one slab).
+ */
+function unitEnvelopeDimensionsFromAnalysis(floorPlan: FloorPlanAnalysis): AnalysisSyncedDims {
+  const ceilingHeight =
+    floorPlan.rooms.length > 0
+      ? Math.max(...floorPlan.rooms.map((r) => r.heightMeters), 2.4)
+      : 2.7
+
+  const fp = floorPlan.geometry?.footprintPolygon
+  if (fp && isValidFootprintPolygon(fp)) {
+    const { width, depth } = polygonAABB(fp)
+    if (width > 0 && depth > 0) {
+      return { width, depth, height: ceilingHeight }
+    }
+  }
+
+  const w = floorPlan.totalWidthMeters > 0 ? floorPlan.totalWidthMeters : 4
+  const d = floorPlan.totalDepthMeters > 0 ? floorPlan.totalDepthMeters : 4
+  return { width: w, depth: d, height: ceilingHeight }
+}
+
+export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderProps) {
+  const router = useRouter()
   const [step, setStep] = useState<UploadStep>("upload")
   const [uploadedFile, setUploadedFile] = useState<{ name: string; type: string; preview?: string } | null>(null)
   const [analysis, setAnalysis] = useState<FloorPlanAnalysis | null>(null)
@@ -40,33 +76,69 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
     depth: 0,
     height: 2.7,
   })
+  /** Baseline for detecting manual edits to the unit envelope; set only from analysis (not room cards). */
+  const [analysisSyncedDimensions, setAnalysisSyncedDimensions] = useState<AnalysisSyncedDims | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const convertPdfToImages = useCallback(async (file: File): Promise<string[]> => {
-    const pdfjsLib = await import("pdfjs-dist")
-    ;(pdfjsLib as any).GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
-
-    const arrayBuffer = await file.arrayBuffer()
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-    const images: string[] = []
-
-    // Render up to first 3 pages (floor plans rarely exceed this)
-    const pageCount = Math.min(pdf.numPages, 3)
-    for (let i = 1; i <= pageCount; i++) {
-      const page = await pdf.getPage(i)
-      const scale = 2 // High-res rendering for better AI analysis
-      const viewport = page.getViewport({ scale })
-
-      const canvas = document.createElement("canvas")
-      canvas.width = viewport.width
-      canvas.height = viewport.height
-      const ctx = canvas.getContext("2d")!
-
-      await (page as any).render({ canvas, canvasContext: ctx, viewport }).promise
-      images.push(canvas.toDataURL("image/png"))
+    if (typeof window === "undefined") {
+      throw new Error("PDF conversion must run in the browser")
     }
 
-    return images
+    try {
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+      const { getDocument, GlobalWorkerOptions } = pdfjs as {
+        getDocument: (opts: { data: ArrayBuffer }) => { promise: Promise<{ numPages: number; getPage: (n: number) => Promise<unknown> }> }
+        GlobalWorkerOptions: { workerSrc: string }
+      }
+
+      if (typeof getDocument !== "function") {
+        throw new Error("PDF.js getDocument is not available")
+      }
+
+      try {
+        const workerSrc = new URL(
+          "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+          import.meta.url
+        ).toString()
+        GlobalWorkerOptions.workerSrc = workerSrc
+      } catch {
+        GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
+      }
+
+      const arrayBuffer = await file.arrayBuffer()
+      const loadingTask = getDocument({ data: arrayBuffer })
+      const pdf = await loadingTask.promise
+
+      const images: string[] = []
+      const pageCount = Math.min(pdf.numPages, 3)
+
+      for (let i = 1; i <= pageCount; i++) {
+        const page = await pdf.getPage(i)
+        const viewport = page.getViewport({ scale: 2 })
+
+        const canvas = document.createElement("canvas")
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        const ctx = canvas.getContext("2d")
+        if (!ctx) throw new Error("Could not get canvas 2d context")
+
+        const renderTask = page.render({
+          canvasContext: ctx,
+          viewport,
+        })
+        await (renderTask?.promise ?? renderTask)
+
+        images.push(canvas.toDataURL("image/png"))
+      }
+
+      return images
+    } catch (err) {
+      console.error("[FloorPlanUploader] PDF conversion error:", err)
+      throw new Error(
+        "Could not read PDF. Please try an image or enter room with default dimensions."
+      )
+    }
   }, [])
 
   const analyzeFloorPlan = useCallback(async (file: File) => {
@@ -77,10 +149,16 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
       let images: string[]
 
       if (file.type === "application/pdf") {
-        // Convert PDF pages to images on the client
-        images = await convertPdfToImages(file)
+        try {
+          images = await convertPdfToImages(file)
+        } catch (pdfErr) {
+          const msg =
+            pdfErr instanceof Error
+              ? pdfErr.message
+              : "Could not read PDF. Please try an image or enter room with default dimensions."
+          throw new Error(msg)
+        }
       } else {
-        // For image files, read as data URL directly
         const dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader()
           reader.onload = () => resolve(reader.result as string)
@@ -90,9 +168,8 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
         images = [dataUrl]
       }
 
-      // Also store the first image as preview for PDFs
       if (file.type === "application/pdf" && images.length > 0) {
-        setUploadedFile((prev) => prev ? { ...prev, preview: images[0] } : prev)
+        setUploadedFile((prev) => (prev ? { ...prev, preview: images[0] } : prev))
       }
 
       const response = await fetch("/api/analyze-floorplan", {
@@ -112,27 +189,18 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
       setAnalysis(floorPlan)
       setSelectedRoomIndex(0)
 
-      if (floorPlan.rooms.length > 0) {
-        const room = floorPlan.rooms[0]
-        setManualDimensions({
-          width: room.widthMeters,
-          depth: room.depthMeters,
-          height: room.heightMeters,
-        })
-      } else {
-        setManualDimensions({
-          width: floorPlan.totalWidthMeters,
-          depth: floorPlan.totalDepthMeters,
-          height: 2.7,
-        })
-      }
+      const synced = unitEnvelopeDimensionsFromAnalysis(floorPlan)
+      setManualDimensions(synced)
+      setAnalysisSyncedDimensions(synced)
 
       setStep("review")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong analyzing the file.")
+      const message =
+        err instanceof Error ? err.message : "Something went wrong. Try an image file or use \"enter room with default dimensions\" below."
+      setError(message)
       setStep("upload")
     }
-  }, [])
+  }, [convertPdfToImages])
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
@@ -175,26 +243,51 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
     maxFiles: 1,
   })
 
+  /** Phase 1: optional focus/inspection only — does not change unit envelope or Generate. */
   const handleRoomSelect = (index: number) => {
     setSelectedRoomIndex(index)
-    if (analysis && analysis.rooms[index]) {
-      const room = analysis.rooms[index]
-      setManualDimensions({
-        width: room.widthMeters,
-        depth: room.depthMeters,
-        height: room.heightMeters,
-      })
-    }
   }
 
   const handleGenerate = () => {
-    onUpload(manualDimensions)
+    const synced = analysisSyncedDimensions
+    const manuallyChangedFromAnalysis =
+      synced == null ||
+      Math.abs(manualDimensions.width - synced.width) >= DIM_EPS ||
+      Math.abs(manualDimensions.depth - synced.depth) >= DIM_EPS ||
+      Math.abs(manualDimensions.height - synced.height) >= DIM_EPS
+
+    const shouldDropGeometry =
+      manuallyChangedFromAnalysis && analysis?.geometry != null
+
+    // TODO: rescale footprintPolygon (and interior walls) to match edited width/depth/height instead of dropping geometry.
+    const dimensions: RoomDimensions = shouldDropGeometry
+      ? {
+          width: manualDimensions.width,
+          depth: manualDimensions.depth,
+          height: manualDimensions.height,
+        }
+      : {
+          ...manualDimensions,
+          ...(analysis?.geometry ? { geometry: analysis.geometry } : {}),
+        }
+
+    // Phase 2+: /room may read selectedZoneIndex for default camera / zone highlight.
+    persistRoomDimensionsToSession({ ...dimensions, selectedZoneIndex: selectedRoomIndex })
+    onUpload(dimensions)
+    const params = new URLSearchParams({
+      width: String(dimensions.width),
+      depth: String(dimensions.depth),
+      height: String(dimensions.height),
+    })
+    router.push(`/room?${params.toString()}`)
   }
 
   const handleReset = () => {
+    clearRoomDimensionsSession()
     setStep("upload")
     setUploadedFile(null)
     setAnalysis(null)
+    setAnalysisSyncedDimensions(null)
     setError(null)
     setEditingDimensions(false)
   }
@@ -217,7 +310,7 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
           {[
             { key: "upload", label: "Upload" },
             { key: "analyzing", label: "AI Analysis" },
-            { key: "review", label: "Review & Generate" },
+            { key: "review", label: "Review unit" },
           ].map((s, i) => {
             const isActive = s.key === step
             const isPast =
@@ -298,6 +391,23 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
               )}
             </Card>
 
+            <p className="text-sm text-muted-foreground mt-6 text-center">
+              or{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof onEnterRoom === "function") {
+                    onEnterRoom()
+                  } else {
+                    router.push("/room")
+                  }
+                }}
+                className="text-primary hover:underline font-medium"
+              >
+                enter room with default dimensions
+              </button>
+            </p>
+
             <div className="mt-8 grid grid-cols-3 gap-6">
               {[
                 { icon: FileText, title: "PDF Support", desc: "Upload architectural PDFs with dimensions" },
@@ -369,11 +479,16 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
           <div className="grid lg:grid-cols-5 gap-6">
             {/* Left: Detected Rooms */}
             <div className="lg:col-span-3 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-primary" />
-                  Detected Rooms
-                </h2>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary" />
+                    Detected spaces
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Optional focus — tap to inspect. Generate always uses the whole apartment envelope →
+                  </p>
+                </div>
                 <Button variant="ghost" size="sm" onClick={handleReset} className="text-muted-foreground gap-1.5">
                   <X className="w-4 h-4" />
                   Upload Different File
@@ -398,11 +513,38 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{uploadedFile.name}</p>
                       <p className="text-sm text-muted-foreground mt-0.5">
-                        Total area: {analysis.totalAreaSqMeters.toFixed(1)} m2 | {analysis.totalWidthMeters.toFixed(1)}m x {analysis.totalDepthMeters.toFixed(1)}m
+                        Unit (analyzed): {analysis.totalAreaSqMeters.toFixed(1)} m² ·{" "}
+                        {analysis.totalWidthMeters.toFixed(1)}m × {analysis.totalDepthMeters.toFixed(1)}m span
                       </p>
                       {analysis.notes && (
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{analysis.notes}</p>
                       )}
+                      {/* TEMPORARY: footprint debug — remove _debugFloorplanGeometry plumbing when done */}
+                      {analysis._debugFloorplanGeometry && (() => {
+                        const dbg = analysis._debugFloorplanGeometry
+                        const iw = dbg.interiorWalls
+                        const dropTotal =
+                          iw != null
+                            ? iw.droppedInvalid + iw.droppedDegenerate + iw.droppedOutlier
+                            : 0
+                        return (
+                          <>
+                            <p className="mt-2 text-[10px] font-mono leading-snug text-amber-700 dark:text-amber-400/90 break-words">
+                              DEBUG footprint: type={dbg.geometryType} · points={dbg.footprintPointCount} · fallback rectangle=
+                              {dbg.usedFallbackRectangle ? "yes" : "no"} · model raw V={dbg.modelRawFootprintVertexCount} · model quad only=
+                              {dbg.modelReturnedExactlyFourFootprintPoints ? "yes" : "no"}
+                            </p>
+                            {iw && (
+                              <p className="mt-1 text-[10px] font-mono leading-snug text-amber-700 dark:text-amber-400/90 break-words">
+                                DEBUG interior walls: raw {iw.modelRawArrayCount} / normalized {iw.normalizedCount}
+                                {dropTotal > 0
+                                  ? ` · dropped invalid/short/outlier=${iw.droppedInvalid}/${iw.droppedDegenerate}/${iw.droppedOutlier}`
+                                  : ""}
+                              </p>
+                            )}
+                          </>
+                        )
+                      })()}
                     </div>
                   </div>
                 </Card>
@@ -452,13 +594,11 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
               </div>
             </div>
 
-            {/* Right: Selected Room Details */}
+            {/* Right: whole-unit envelope (Generate); optional room focus as secondary */}
             <div className="lg:col-span-2 space-y-4">
               <Card className="p-6 bg-card border-border">
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="font-semibold">
-                    {analysis.rooms[selectedRoomIndex]?.name || "Room"} Dimensions
-                  </h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold">Apartment / unit envelope</h3>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -469,11 +609,25 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
                     {editingDimensions ? "Done" : "Edit"}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground mb-4">
+                  These values drive <span className="font-medium text-foreground">Generate</span> (full unit 3D). Adjust
+                  if totals need correction.
+                </p>
+                {analysis.rooms[selectedRoomIndex] && (
+                  <div className="mb-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Focus (optional): </span>
+                    {analysis.rooms[selectedRoomIndex].name} ·{" "}
+                    {analysis.rooms[selectedRoomIndex].widthMeters.toFixed(1)}m ×{" "}
+                    {analysis.rooms[selectedRoomIndex].depthMeters.toFixed(1)}m ·{" "}
+                    {(analysis.rooms[selectedRoomIndex].widthMeters * analysis.rooms[selectedRoomIndex].depthMeters).toFixed(1)}{" "}
+                    m² est.
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="width" className="text-sm text-muted-foreground">
-                      Width (meters)
+                      Unit width (meters)
                     </Label>
                     <Input
                       id="width"
@@ -489,7 +643,7 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
                   </div>
                   <div>
                     <Label htmlFor="depth" className="text-sm text-muted-foreground">
-                      Depth (meters)
+                      Unit depth (meters)
                     </Label>
                     <Input
                       id="depth"
@@ -505,7 +659,7 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
                   </div>
                   <div>
                     <Label htmlFor="height" className="text-sm text-muted-foreground">
-                      Ceiling Height (meters)
+                      Ceiling height (meters)
                     </Label>
                     <Input
                       id="height"
@@ -521,23 +675,32 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
                   </div>
                 </div>
 
-                {/* Visual preview */}
+                {/* Visual preview — whole-unit footprint when polygon exists */}
                 <div className="mt-6 p-4 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground mb-3 text-center">Room Preview</p>
+                  <p className="text-xs text-muted-foreground mb-3 text-center">
+                    Whole-unit footprint preview
+                  </p>
                   <div className="flex items-center justify-center">
                     <RoomPreview
                       width={manualDimensions.width}
                       depth={manualDimensions.depth}
+                      footprintPolygon={analysis.geometry?.footprintPolygon}
                     />
                   </div>
                 </div>
               </Card>
 
-              <Button className="w-full gap-2" size="lg" onClick={handleGenerate}>
-                <Sparkles className="w-4 h-4" />
-                Generate 3D Environment
-                <ArrowRight className="w-4 h-4" />
-              </Button>
+              <div className="space-y-2">
+                <Button className="w-full gap-2" size="lg" onClick={handleGenerate}>
+                  <Sparkles className="w-4 h-4" />
+                  Generate 3D apartment
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+                <p className="text-xs text-muted-foreground text-center px-1">
+                  Uses the unit envelope and footprint above, not the focused room card alone.
+                  {/* TODO Phase 2: plan camera preset + zone picking on /room */}
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -546,7 +709,31 @@ export function FloorPlanUploader({ onUpload }: FloorPlanUploaderProps) {
   )
 }
 
-function RoomPreview({ width, depth }: { width: number; depth: number }) {
+function RoomPreview({
+  width,
+  depth,
+  footprintPolygon,
+}: {
+  width: number
+  depth: number
+  footprintPolygon?: FloorplanPoint2D[]
+}) {
+  if (footprintPolygon && isValidFootprintPolygon(footprintPolygon)) {
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <FootprintPolygonPreview polygon={footprintPolygon} />
+        <p className="text-[10px] text-muted-foreground text-center max-w-[220px] leading-tight">
+          Exterior footprint from analysis. Numbers below are the whole-unit envelope (editable).
+        </p>
+        <div className="flex gap-3 text-xs font-medium text-primary mt-1">
+          <span>{width.toFixed(1)}m</span>
+          <span className="text-muted-foreground">×</span>
+          <span>{depth.toFixed(1)}m</span>
+        </div>
+      </div>
+    )
+  }
+
   const maxSize = 160
   const ratio = width / depth
   let w: number
@@ -561,7 +748,8 @@ function RoomPreview({ width, depth }: { width: number; depth: number }) {
   }
 
   return (
-    <div className="relative" style={{ width: w, height: h }}>
+    <div className="flex flex-col items-center gap-1">
+      <div className="relative" style={{ width: w, height: h }}>
       <div className="absolute inset-0 border-2 border-primary/60 rounded bg-primary/5" />
       {/* Width label */}
       <div className="absolute -bottom-6 left-0 right-0 text-center">
@@ -584,6 +772,53 @@ function RoomPreview({ width, depth }: { width: number; depth: number }) {
           style={pos as React.CSSProperties}
         />
       ))}
+      </div>
+      <p className="text-[10px] text-muted-foreground text-center max-w-[220px] leading-tight mt-6">
+        Rectangle from unit envelope (no polygon). Same values as width/depth fields.
+      </p>
     </div>
+  )
+}
+
+/** Plan-space preview: x right, y up (SVG Y flipped). */
+function FootprintPolygonPreview({ polygon }: { polygon: FloorplanPoint2D[] }) {
+  const maxSize = 160
+  const pad = 6
+  const xs = polygon.map((p) => p.x)
+  const ys = polygon.map((p) => p.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const bw = maxX - minX || 1
+  const bh = maxY - minY || 1
+  const inner = maxSize - pad * 2
+  const scale = inner / Math.max(bw, bh)
+
+  const points = polygon
+    .map((p) => {
+      const sx = pad + (p.x - minX) * scale
+      const sy = pad + (maxY - p.y) * scale
+      return `${Number(sx.toFixed(2))},${Number(sy.toFixed(2))}`
+    })
+    .join(" ")
+
+  return (
+    <svg
+      width={maxSize}
+      height={maxSize}
+      className="text-primary shrink-0 overflow-visible"
+      aria-hidden
+    >
+      <polygon
+        points={points}
+        fill="currentColor"
+        fillOpacity={0.08}
+        stroke="currentColor"
+        strokeOpacity={0.55}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
