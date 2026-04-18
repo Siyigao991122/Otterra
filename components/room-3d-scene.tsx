@@ -20,7 +20,14 @@ import {
 import { Canvas, useThree, useFrame } from "@react-three/fiber"
 import { OrbitControls, Grid, Environment, Html, PerspectiveCamera } from "@react-three/drei"
 import * as THREE from "three"
-import type { FloorplanPoint2D, FloorplanWallSegment, Furniture, RoomDimensions } from "@/lib/types"
+import type {
+  FloorplanOpening,
+  FloorplanPoint2D,
+  FloorplanRoomZone,
+  FloorplanWallSegment,
+  Furniture,
+  RoomDimensions,
+} from "@/lib/types"
 import { isValidFootprintPolygon, polygonAABB } from "@/lib/floorplanGeometry"
 import { extractProductIdFromFurnitureId } from "@/lib/extractProductIdFromFurnitureId"
 import type { ProductModelLifecycle } from "@/lib/productModelLifecycle"
@@ -219,34 +226,171 @@ function ApartmentSceneControls({
   )
 }
 
-const POLYGON_WALL_THICKNESS_EXTERIOR = 0.1
-const POLYGON_WALL_THICKNESS_INTERIOR_DEFAULT = 0.07
+const POLYGON_WALL_THICKNESS_EXTERIOR = 0.15
+const POLYGON_WALL_THICKNESS_INTERIOR_DEFAULT = 0.1
+
+/** Room type → subtle floor tint for identification in top-down view. */
+const ROOM_TYPE_COLORS: Record<string, string> = {
+  living_room: "#e8ecf0",
+  bedroom: "#e8edf5",
+  bathroom: "#e5f0ee",
+  kitchen: "#f5efe5",
+  dining: "#f0ece5",
+  hallway: "#ebebeb",
+  office: "#eae8f0",
+  balcony: "#e5f0e8",
+  storage: "#ebebeb",
+  garage: "#e8e8e8",
+  other: "#ececec",
+}
+
+/**
+ * A single box segment of a wall (with position along wall, y-center, height).
+ * Walls are split at door/window openings.
+ */
+interface WallBoxSegment {
+  /** Length in meters. */
+  len: number
+  /** X/Z center of this segment in scene space. */
+  cx: number
+  cz: number
+  /** Y center of this segment. */
+  cy: number
+  /** Height of this segment. */
+  height: number
+  /** Thickness of the wall. */
+  thickness: number
+  /** Wall direction quaternion (same for all segments of the same wall). */
+  q: THREE.Quaternion
+}
+
+/**
+ * Compute wall box segments for a single wall edge, splitting at openings.
+ * ax/az, bx/bz: wall endpoints in plan space (= scene XZ).
+ * Returns an array of box segments to render.
+ */
+function wallSegmentsWithOpenings(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  wallHeight: number,
+  thickness: number,
+  openings: FloorplanOpening[]
+): WallBoxSegment[] {
+  const dx = bx - ax
+  const dz = bz - az
+  const wallLen = Math.hypot(dx, dz)
+  if (wallLen < 1e-6) return []
+
+  const dirX = dx / wallLen
+  const dirZ = dz / wallLen
+  const perpX = -dirZ
+  const perpZ = dirX
+
+  const dir3 = new THREE.Vector3(dirX, 0, dirZ)
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir3)
+
+  // Find openings on this wall
+  interface OpeningCut {
+    start: number
+    end: number
+    openingHeight: number
+    sillHeight: number
+    type: FloorplanOpening["type"]
+  }
+  const cuts: OpeningCut[] = []
+  for (const op of openings) {
+    const vecX = op.x - ax
+    const vecZ = op.y - az
+    const along = vecX * dirX + vecZ * dirZ
+    const perp = Math.abs(vecX * perpX + vecZ * perpZ)
+    if (perp > thickness / 2 + 0.45) continue
+    const halfW = op.width / 2
+    if (along + halfW < 0 || along - halfW > wallLen) continue
+    const openH = op.height ?? (op.type === "door" ? 2.1 : 1.2)
+    const sillH = op.sillHeight ?? (op.type === "window" ? 0.9 : 0)
+    cuts.push({
+      start: Math.max(0, along - halfW),
+      end: Math.min(wallLen, along + halfW),
+      openingHeight: Math.min(openH, wallHeight - 0.05),
+      sillHeight: sillH,
+      type: op.type,
+    })
+  }
+  cuts.sort((a, b) => a.start - b.start)
+
+  // Build list of solid box segments from the cuts
+  const boxes: Array<{ tStart: number; tEnd: number; yCenter: number; segHeight: number }> = []
+
+  const addBox = (tS: number, tE: number, yC: number, h: number) => {
+    if (tE - tS > 0.01 && h > 0.01) boxes.push({ tStart: tS, tEnd: tE, yCenter: yC, segHeight: h })
+  }
+
+  let pos = 0
+  for (const cut of cuts) {
+    // Solid section before this cut
+    addBox(pos, cut.start, wallHeight / 2, wallHeight)
+    // Sill (window only)
+    if (cut.type === "window" && cut.sillHeight > 0) {
+      addBox(cut.start, cut.end, cut.sillHeight / 2, cut.sillHeight)
+    }
+    // Header above the opening
+    const topOfOpening = cut.type === "door" ? cut.openingHeight : cut.sillHeight + cut.openingHeight
+    const headerH = wallHeight - topOfOpening
+    addBox(cut.start, cut.end, topOfOpening + headerH / 2, headerH)
+    pos = cut.end
+  }
+  // Remaining solid
+  addBox(pos, wallLen, wallHeight / 2, wallHeight)
+
+  return boxes.map((b) => {
+    const segLen = b.tEnd - b.tStart
+    const midT = (b.tStart + b.tEnd) / (2 * wallLen)
+    return {
+      len: segLen,
+      cx: ax + dx * midT,
+      cz: az + dz * midT,
+      cy: b.yCenter,
+      height: b.segHeight,
+      thickness,
+      q,
+    }
+  })
+}
 
 /**
  * Extruded shell from 2D footprint (plan x → world X, plan y → world Z).
- * TODO: clip wall segments at door/window openings; align thickness to CAD when available.
+ * Renders exterior walls, interior walls, floor, ceiling, and room zone labels.
+ * Cuts door/window openings from wall segments when openings data is available.
  */
 function PolygonRoomShell({
   footprint,
   wallHeight,
   interiorWalls,
+  openings = [],
+  roomZones = [],
 }: {
   footprint: FloorplanPoint2D[]
   wallHeight: number
   interiorWalls?: FloorplanWallSegment[]
+  openings?: FloorplanOpening[]
+  roomZones?: FloorplanRoomZone[]
 }) {
   const exteriorMat = useMemo(
-    () => ({ color: "#cfd6df", roughness: 0.48, metalness: 0.04 } as const),
+    () => ({ color: "#d0d7e0", roughness: 0.45, metalness: 0.05 } as const),
     []
   )
   const interiorMat = useMemo(
-    () => ({ color: "#b8c0cc", roughness: 0.5, metalness: 0.05 } as const),
+    () => ({ color: "#c2cad4", roughness: 0.5, metalness: 0.04 } as const),
     []
   )
-  const floorMat = useMemo(
-    () => ({ color: "#dce0e6", roughness: 0.62, metalness: 0.04 } as const),
+  const ceilingMat = useMemo(
+    () => ({ color: "#f8f8fa", roughness: 0.3, metalness: 0.0 } as const),
     []
   )
+
+  // Base floor geometry from footprint polygon
   const floorGeo = useMemo(() => {
     const shape = new THREE.Shape()
     shape.moveTo(footprint[0].x, -footprint[0].y)
@@ -257,66 +401,128 @@ function PolygonRoomShell({
     return new THREE.ShapeGeometry(shape)
   }, [footprint])
 
-  const wallElements = useMemo(() => {
-    const out: ReactNode[] = []
+  // Ceiling: same shape as floor, placed at wallHeight
+  const ceilingGeo = useMemo(() => {
+    const shape = new THREE.Shape()
+    shape.moveTo(footprint[0].x, -footprint[0].y)
+    for (let i = 1; i < footprint.length; i++) {
+      shape.lineTo(footprint[i].x, -footprint[i].y)
+    }
+    shape.closePath()
+    return new THREE.ShapeGeometry(shape)
+  }, [footprint])
+
+  // Per-room-zone floor geometry with type-based color
+  const roomFloorElements = useMemo(() => {
+    if (!roomZones.length) return null
+    return roomZones.map((zone) => {
+      if (zone.polygon.length < 3) return null
+      const shape = new THREE.Shape()
+      shape.moveTo(zone.polygon[0].x, -zone.polygon[0].y)
+      for (let i = 1; i < zone.polygon.length; i++) {
+        shape.lineTo(zone.polygon[i].x, -zone.polygon[i].y)
+      }
+      shape.closePath()
+      const geo = new THREE.ShapeGeometry(shape)
+      const color = ROOM_TYPE_COLORS[zone.type ?? "other"] ?? ROOM_TYPE_COLORS.other
+      return (
+        <mesh key={zone.id} geometry={geo} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.003, 0]} receiveShadow>
+          <meshStandardMaterial color={color} roughness={0.7} metalness={0.0} side={THREE.DoubleSide} />
+        </mesh>
+      )
+    })
+  }, [roomZones])
+
+  // Exterior wall segments (with opening cuts)
+  const exteriorWallBoxes = useMemo(() => {
     const n = footprint.length
+    const boxes: WallBoxSegment[] = []
     for (let i = 0; i < n; i++) {
       const a = footprint[i]
       const b = footprint[(i + 1) % n]
-      const ax = a.x
-      const az = a.y
-      const bx = b.x
-      const bz = b.y
-      const dx = bx - ax
-      const dz = bz - az
-      const len = Math.hypot(dx, dz)
-      if (len < 1e-6) continue
-      const midx = (ax + bx) / 2
-      const midz = (az + bz) / 2
-      const dir = new THREE.Vector3(dx / len, 0, dz / len)
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir)
-      out.push(
-        <group key={`perim-${i}`} position={[midx, wallHeight / 2, midz]} quaternion={q}>
-          <mesh receiveShadow castShadow>
-            <boxGeometry args={[len, wallHeight, POLYGON_WALL_THICKNESS_EXTERIOR]} />
-            <meshStandardMaterial {...exteriorMat} />
-          </mesh>
-        </group>
-      )
+      boxes.push(...wallSegmentsWithOpenings(a.x, a.y, b.x, b.y, wallHeight, POLYGON_WALL_THICKNESS_EXTERIOR, openings))
     }
-    let iw = 0
+    return boxes
+  }, [footprint, wallHeight, openings])
+
+  // Interior wall segments (with opening cuts)
+  const interiorWallBoxes = useMemo(() => {
+    const boxes: WallBoxSegment[] = []
     for (const w of interiorWalls ?? []) {
-      const ax = w.x1
-      const az = w.y1
-      const bx = w.x2
-      const bz = w.y2
-      const dx = bx - ax
-      const dz = bz - az
-      const len = Math.hypot(dx, dz)
-      if (len < 1e-6) continue
-      const midx = (ax + bx) / 2
-      const midz = (az + bz) / 2
-      const dir = new THREE.Vector3(dx / len, 0, dz / len)
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir)
-      const t = Math.max(w.thickness ?? POLYGON_WALL_THICKNESS_INTERIOR_DEFAULT, 0.04)
-      out.push(
-        <group key={`int-${w.id}-${iw++}`} position={[midx, wallHeight / 2, midz]} quaternion={q}>
-          <mesh receiveShadow castShadow>
-            <boxGeometry args={[len, wallHeight, t]} />
-            <meshStandardMaterial {...interiorMat} />
-          </mesh>
-        </group>
-      )
+      const t = Math.max(w.thickness ?? POLYGON_WALL_THICKNESS_INTERIOR_DEFAULT, 0.06)
+      boxes.push(...wallSegmentsWithOpenings(w.x1, w.y1, w.x2, w.y2, wallHeight, t, openings))
     }
-    return out
-  }, [footprint, wallHeight, interiorWalls, exteriorMat, interiorMat])
+    return boxes
+  }, [interiorWalls, wallHeight, openings])
 
   return (
     <group>
+      {/* Base floor */}
       <mesh geometry={floorGeo} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <meshStandardMaterial {...floorMat} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#e0e4ea" roughness={0.65} metalness={0.03} side={THREE.DoubleSide} />
       </mesh>
-      {wallElements}
+
+      {/* Room zone floor overlays */}
+      {roomFloorElements}
+
+      {/* Ceiling */}
+      <mesh geometry={ceilingGeo} rotation={[Math.PI / 2, 0, 0]} position={[0, wallHeight, 0]}>
+        <meshStandardMaterial {...ceilingMat} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Exterior walls */}
+      {exteriorWallBoxes.map((box, i) => (
+        <group key={`ext-${i}`} position={[box.cx, box.cy, box.cz]} quaternion={box.q}>
+          <mesh receiveShadow castShadow>
+            <boxGeometry args={[box.len, box.height, box.thickness]} />
+            <meshStandardMaterial {...exteriorMat} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Interior walls */}
+      {interiorWallBoxes.map((box, i) => (
+        <group key={`int-${i}`} position={[box.cx, box.cy, box.cz]} quaternion={box.q}>
+          <mesh receiveShadow castShadow>
+            <boxGeometry args={[box.len, box.height, box.thickness]} />
+            <meshStandardMaterial {...interiorMat} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Room zone labels */}
+      {roomZones.map((zone) => {
+        if (!zone.centroid || !zone.label) return null
+        return (
+          <Html
+            key={`label-${zone.id}`}
+            position={[zone.centroid.x, 0.05, zone.centroid.y]}
+            center
+            distanceFactor={12}
+            zIndexRange={[0, 0]}
+          >
+            <div
+              style={{
+                background: "rgba(255,255,255,0.82)",
+                backdropFilter: "blur(4px)",
+                border: "1px solid rgba(0,0,0,0.10)",
+                borderRadius: "6px",
+                padding: "3px 8px",
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "#1a1a2e",
+                whiteSpace: "nowrap",
+                pointerEvents: "none",
+                userSelect: "none",
+                lineHeight: "1.4",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
+              }}
+            >
+              {zone.label}
+            </div>
+          </Html>
+        )
+      })}
     </group>
   )
 }
@@ -357,6 +563,8 @@ function Room({ dimensions }: { dimensions: RoomDimensions }) {
         footprint={fp}
         wallHeight={dimensions.height}
         interiorWalls={dimensions.geometry?.interiorWalls}
+        openings={dimensions.geometry?.openings}
+        roomZones={dimensions.geometry?.rooms}
       />
     )
   }

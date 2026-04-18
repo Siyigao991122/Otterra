@@ -14,10 +14,43 @@ export interface FloorplanWallSegment {
   thickness?: number
 }
 
+export type FloorplanOpeningType = "door" | "window"
+
+/** A door or window opening in a wall. Position is the center of the opening in plan space. */
+export interface FloorplanOpening {
+  id: string
+  type: FloorplanOpeningType
+  /** Center of opening in plan space (same coordinate system as footprint). */
+  x: number
+  y: number
+  /** Opening width in meters. */
+  width: number
+  /** Opening height in meters (default: 2.1 for door, 1.2 for window). */
+  height?: number
+  /** Sill height from floor in meters (windows only; default 0.9). */
+  sillHeight?: number
+}
+
+/** Room type used for floor color coding and labeling. */
+export type FloorplanRoomType =
+  | "living_room"
+  | "bedroom"
+  | "bathroom"
+  | "kitchen"
+  | "dining"
+  | "hallway"
+  | "office"
+  | "balcony"
+  | "storage"
+  | "garage"
+  | "other"
+
 export interface FloorplanRoomZone {
   id: string
   label?: string
+  type?: FloorplanRoomType | string
   polygon: FloorplanPoint2D[]
+  centroid?: FloorplanPoint2D
 }
 
 export interface FloorplanDimensionAnnotation {
@@ -28,13 +61,14 @@ export interface FloorplanDimensionAnnotation {
 }
 
 /**
- * Structured geometry from floorplan analysis (MVP: footprint + optional interior walls).
+ * Structured geometry from floorplan analysis.
  */
 export interface FloorplanGeometry {
   units?: "m" | "ft"
   scale?: number
   footprintPolygon: FloorplanPoint2D[]
   interiorWalls?: FloorplanWallSegment[]
+  openings?: FloorplanOpening[]
   rooms?: FloorplanRoomZone[]
   dimensions?: FloorplanDimensionAnnotation[]
   rawText?: string[]

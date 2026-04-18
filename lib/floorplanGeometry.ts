@@ -4,7 +4,9 @@
 
 import type {
   FloorplanGeometry,
+  FloorplanOpening,
   FloorplanPoint2D,
+  FloorplanRoomZone,
   FloorplanWallSegment,
   InteriorWallSanitizeStats,
 } from "@/lib/types"
@@ -216,16 +218,90 @@ export function sanitizeFloorplanGeometryWithStats(raw: unknown): {
 
   const { walls: interiorWalls, stats: interiorWallStats } = processInteriorWalls(wallsField, cx, cy, span)
 
+  const openings = processOpenings(obj.openingsMeters ?? obj.openings, cx, cy)
+  const rooms = processRoomZones(obj.roomZonesMeters ?? obj.roomZones, cx, cy)
+
   const geometry: FloorplanGeometry = {
     units: "m",
     footprintPolygon,
     interiorWalls: interiorWalls.length ? interiorWalls : undefined,
+    openings: openings.length ? openings : undefined,
+    rooms: rooms.length ? rooms : undefined,
     confidence: typeof obj.confidence === "number" ? obj.confidence : undefined,
   }
 
-  // TODO: map dimension callout lines to wall segments when CAD OCR improves
-  // TODO: doors / openings as edge gaps
   return { geometry, interiorWallStats }
+}
+
+function processOpenings(raw: unknown, cx: number, cy: number): FloorplanOpening[] {
+  if (!Array.isArray(raw)) return []
+  const out: FloorplanOpening[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i]
+    if (!item || typeof item !== "object") continue
+    const o = item as Record<string, unknown>
+    const x = Number(o.x)
+    const y = Number(o.y)
+    const width = Number(o.width)
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || width <= 0) continue
+    const type: FloorplanOpening["type"] = o.type === "window" ? "window" : "door"
+    const opening: FloorplanOpening = {
+      id: typeof o.id === "string" ? o.id : `opening-${i}`,
+      type,
+      x: x - cx,
+      y: y - cy,
+      width: Math.min(Math.max(width, 0.4), 3.5),
+    }
+    if (Number.isFinite(Number(o.height)) && Number(o.height) > 0) opening.height = Number(o.height)
+    if (Number.isFinite(Number(o.sillHeight))) opening.sillHeight = Number(o.sillHeight)
+    out.push(opening)
+  }
+  return out
+}
+
+function polygonCentroid(polygon: FloorplanPoint2D[]): FloorplanPoint2D {
+  const cx = polygon.reduce((s, p) => s + p.x, 0) / polygon.length
+  const cy = polygon.reduce((s, p) => s + p.y, 0) / polygon.length
+  return { x: cx, y: cy }
+}
+
+function processRoomZones(raw: unknown, cx: number, cy: number): FloorplanRoomZone[] {
+  if (!Array.isArray(raw)) return []
+  const out: FloorplanRoomZone[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i]
+    if (!item || typeof item !== "object") continue
+    const zone = item as Record<string, unknown>
+    const polyRaw = zone.polygon
+    if (!Array.isArray(polyRaw)) continue
+    const polygon: FloorplanPoint2D[] = []
+    for (const pt of polyRaw) {
+      if (!pt || typeof pt !== "object") continue
+      const p = pt as Record<string, unknown>
+      const px = Number(p.x)
+      const py = Number(p.y)
+      if (Number.isFinite(px) && Number.isFinite(py)) polygon.push({ x: px - cx, y: py - cy })
+    }
+    if (polygon.length < 3) continue
+
+    let centroid: FloorplanPoint2D | undefined
+    if (zone.centroid && typeof zone.centroid === "object") {
+      const cr = zone.centroid as Record<string, unknown>
+      const crx = Number(cr.x)
+      const cry = Number(cr.y)
+      if (Number.isFinite(crx) && Number.isFinite(cry)) centroid = { x: crx - cx, y: cry - cy }
+    }
+    if (!centroid) centroid = polygonCentroid(polygon)
+
+    out.push({
+      id: typeof zone.id === "string" ? zone.id : `room-zone-${i}`,
+      label: typeof zone.label === "string" ? zone.label : undefined,
+      type: typeof zone.type === "string" ? zone.type : undefined,
+      polygon,
+      centroid,
+    })
+  }
+  return out
 }
 
 export function sanitizeFloorplanGeometry(raw: unknown): FloorplanGeometry | undefined {

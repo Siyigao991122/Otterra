@@ -685,6 +685,7 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
                       width={manualDimensions.width}
                       depth={manualDimensions.depth}
                       footprintPolygon={analysis.geometry?.footprintPolygon}
+                      roomZones={analysis.geometry?.rooms}
                     />
                   </div>
                 </div>
@@ -709,19 +710,50 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
   )
 }
 
+/** Room type → SVG fill color for 2D preview. */
+const ROOM_PREVIEW_COLORS: Record<string, string> = {
+  living_room: "rgba(99,130,180,0.18)",
+  bedroom: "rgba(100,120,200,0.16)",
+  bathroom: "rgba(60,160,140,0.18)",
+  kitchen: "rgba(200,140,60,0.18)",
+  dining: "rgba(180,130,80,0.16)",
+  hallway: "rgba(140,140,140,0.14)",
+  office: "rgba(120,90,180,0.16)",
+  balcony: "rgba(60,170,90,0.18)",
+  storage: "rgba(140,140,140,0.12)",
+  garage: "rgba(120,120,120,0.14)",
+  other: "rgba(130,130,130,0.12)",
+}
+
+const ROOM_PREVIEW_STROKE: Record<string, string> = {
+  living_room: "rgba(70,100,160,0.45)",
+  bedroom: "rgba(70,90,170,0.40)",
+  bathroom: "rgba(40,130,115,0.45)",
+  kitchen: "rgba(160,110,40,0.45)",
+  dining: "rgba(150,100,55,0.40)",
+  hallway: "rgba(100,100,100,0.35)",
+  office: "rgba(90,65,150,0.40)",
+  balcony: "rgba(40,140,65,0.45)",
+  storage: "rgba(100,100,100,0.30)",
+  garage: "rgba(90,90,90,0.35)",
+  other: "rgba(100,100,100,0.30)",
+}
+
 function RoomPreview({
   width,
   depth,
   footprintPolygon,
+  roomZones,
 }: {
   width: number
   depth: number
   footprintPolygon?: FloorplanPoint2D[]
+  roomZones?: import("@/lib/types").FloorplanRoomZone[]
 }) {
   if (footprintPolygon && isValidFootprintPolygon(footprintPolygon)) {
     return (
       <div className="flex flex-col items-center gap-1">
-        <FootprintPolygonPreview polygon={footprintPolygon} />
+        <FootprintPolygonPreview polygon={footprintPolygon} roomZones={roomZones} />
         <p className="text-[10px] text-muted-foreground text-center max-w-[220px] leading-tight">
           Exterior footprint from analysis. Numbers below are the whole-unit envelope (editable).
         </p>
@@ -780,12 +812,21 @@ function RoomPreview({
   )
 }
 
-/** Plan-space preview: x right, y up (SVG Y flipped). */
-function FootprintPolygonPreview({ polygon }: { polygon: FloorplanPoint2D[] }) {
-  const maxSize = 160
-  const pad = 6
-  const xs = polygon.map((p) => p.x)
-  const ys = polygon.map((p) => p.y)
+/** Plan-space preview: x right, y up (SVG Y flipped). Renders footprint + room zones with labels. */
+function FootprintPolygonPreview({
+  polygon,
+  roomZones,
+}: {
+  polygon: FloorplanPoint2D[]
+  roomZones?: import("@/lib/types").FloorplanRoomZone[]
+}) {
+  const maxSize = 180
+  const pad = 8
+
+  // Compute bounding box from all points (footprint + room zones)
+  const allPts = [...polygon, ...(roomZones ?? []).flatMap((z) => z.polygon)]
+  const xs = allPts.map((p) => p.x)
+  const ys = allPts.map((p) => p.y)
   const minX = Math.min(...xs)
   const maxX = Math.max(...xs)
   const minY = Math.min(...ys)
@@ -795,10 +836,14 @@ function FootprintPolygonPreview({ polygon }: { polygon: FloorplanPoint2D[] }) {
   const inner = maxSize - pad * 2
   const scale = inner / Math.max(bw, bh)
 
-  const points = polygon
+  const toSvg = (p: FloorplanPoint2D) => ({
+    sx: pad + (p.x - minX) * scale,
+    sy: pad + (maxY - p.y) * scale,
+  })
+
+  const footprintPoints = polygon
     .map((p) => {
-      const sx = pad + (p.x - minX) * scale
-      const sy = pad + (maxY - p.y) * scale
+      const { sx, sy } = toSvg(p)
       return `${Number(sx.toFixed(2))},${Number(sy.toFixed(2))}`
     })
     .join(" ")
@@ -807,18 +852,64 @@ function FootprintPolygonPreview({ polygon }: { polygon: FloorplanPoint2D[] }) {
     <svg
       width={maxSize}
       height={maxSize}
-      className="text-primary shrink-0 overflow-visible"
+      className="shrink-0 overflow-visible"
       aria-hidden
     >
+      {/* Room zone polygons */}
+      {(roomZones ?? []).map((zone) => {
+        if (zone.polygon.length < 3) return null
+        const pts = zone.polygon
+          .map((p) => {
+            const { sx, sy } = toSvg(p)
+            return `${Number(sx.toFixed(2))},${Number(sy.toFixed(2))}`
+          })
+          .join(" ")
+        const fill = ROOM_PREVIEW_COLORS[zone.type ?? "other"] ?? ROOM_PREVIEW_COLORS.other
+        const stroke = ROOM_PREVIEW_STROKE[zone.type ?? "other"] ?? ROOM_PREVIEW_STROKE.other
+        return (
+          <polygon
+            key={zone.id}
+            points={pts}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={0.8}
+            strokeLinejoin="round"
+          />
+        )
+      })}
+
+      {/* Exterior footprint outline */}
       <polygon
-        points={points}
-        fill="currentColor"
-        fillOpacity={0.08}
+        points={footprintPoints}
+        fill="none"
         stroke="currentColor"
-        strokeOpacity={0.55}
-        strokeWidth={1.5}
+        strokeOpacity={0.6}
+        strokeWidth={2}
         strokeLinejoin="round"
+        className="text-primary"
       />
+
+      {/* Room zone labels */}
+      {(roomZones ?? []).map((zone) => {
+        if (!zone.centroid || !zone.label) return null
+        const { sx, sy } = toSvg(zone.centroid)
+        const shortLabel = zone.label.length > 14 ? zone.label.slice(0, 13) + "…" : zone.label
+        return (
+          <text
+            key={`label-${zone.id}`}
+            x={Number(sx.toFixed(2))}
+            y={Number(sy.toFixed(2))}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={8}
+            fontWeight={600}
+            fill="rgba(20,20,50,0.75)"
+            style={{ pointerEvents: "none", userSelect: "none" }}
+          >
+            {shortLabel}
+          </text>
+        )
+      })}
     </svg>
   )
 }
