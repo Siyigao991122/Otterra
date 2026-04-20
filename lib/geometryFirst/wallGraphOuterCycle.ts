@@ -342,6 +342,7 @@ export function traceOuterCycleLargestComponent(input: {
       startNodeIndex: -1,
       startDirectedTo: -1,
       vertexSample: [],
+      fullVertexCycle: undefined,
       notes: ["Largest component has fewer than 2 nodes — cannot trace a cycle."],
       multiSeed: emptyMulti,
       candidateSummariesTop: [],
@@ -430,6 +431,7 @@ export function traceOuterCycleLargestComponent(input: {
       startNodeIndex: seeds[0]?.[0] ?? -1,
       startDirectedTo: seeds[0]?.[1] ?? -1,
       vertexSample: [],
+      fullVertexCycle: undefined,
       notes: [
         `Multi-seed left-face: tried ${tried} directed starts, no usable cycle (unique closed geometries: ${uniqueClosed}).`,
       ],
@@ -447,6 +449,10 @@ export function traceOuterCycleLargestComponent(input: {
 
   const wSup = winner.steps > 0 ? winner.matched / winner.steps : 0
   const wPts = winner.cycleNodes.map((i) => pos[i])
+  const fullVertexCycle =
+    winner.closed && winner.cycleNodes.length >= 3
+      ? winner.cycleNodes.slice(0, 512).map((i) => ({ x: pos[i].x, y: pos[i].y }))
+      : undefined
   const rankOfWinner =
     candidateSummariesTop.findIndex(
       (s) =>
@@ -513,6 +519,7 @@ export function traceOuterCycleLargestComponent(input: {
     startNodeIndex: winner.startU,
     startDirectedTo: winner.startV,
     vertexSample: wPts.slice(0, 32).map((p) => ({ x: p.x, y: p.y })),
+    fullVertexCycle,
     notes,
     multiSeed: {
       maxDirectedSeeds,

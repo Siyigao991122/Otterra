@@ -10,6 +10,8 @@
  * When the main-wall compare block runs, writes:
  *   debug/geometry-first-main-walls-<pdfBasename>.svg
  *   debug/geometry-first-main-walls-<pdfBasename>-minimal.svg
+ *   debug/geometry-first-wall-hypotheses-<pdfBasename>.svg (strict input)
+ *   debug/geometry-first-wall-hypotheses-<pdfBasename>-extended.svg (extended structural input)
  */
 
 import * as fs from "node:fs"
@@ -26,7 +28,12 @@ import type {
   WallGraphDebugPayload,
 } from "../lib/geometryFirst/types"
 import { buildWallGraphFoundationFromCleaned } from "../lib/geometryFirst/wallGraphFoundation"
+import { buildArchitecturalWallHypotheses } from "../lib/geometryFirst/architecturalWallHypotheses"
+import { writeArchitecturalWallHypothesesSvg } from "../lib/geometryFirst/debugArchitecturalWallHypothesesSvg"
 import { writeMainStructuralWallSelectionSvg } from "../lib/geometryFirst/debugMainStructuralWallSvg"
+import { buildExtendedStructuralWalls } from "../lib/geometryFirst/extendedStructuralWalls"
+import { buildGlobalStructuralSpans } from "../lib/geometryFirst/globalStructuralSpans"
+import { computeDrawingClusterDiagnostics } from "../lib/geometryFirst/drawingClusterDiagnostics"
 import type { MainStructuralWallSelectorResult } from "../lib/geometryFirst/mainStructuralWallSelector"
 import { selectMainStructuralWalls } from "../lib/geometryFirst/mainStructuralWallSelector"
 import { splitWallLinesAtJunctions } from "../lib/geometryFirst/splitWallLinesAtJunctions"
@@ -295,24 +302,109 @@ async function main(): Promise<void> {
     const mainSplit = splitWallLinesAtJunctions(mainPick.selectedMainWalls).split
     const wallMain = buildWallGraphFoundationFromCleaned(mainSplit)
 
+    const clusterDiag = computeDrawingClusterDiagnostics(cleanedRef, bounds)
+    const robustPlan = clusterDiag.robustPlan
+    const extendedPick = buildExtendedStructuralWalls(cleanedRef, mainPick.selectedMainWalls, robustPlan.robustEnvelope)
+    const extendedSplit = splitWallLinesAtJunctions(extendedPick.extendedStructuralWalls).split
+    const wallExtended = buildWallGraphFoundationFromCleaned(extendedSplit)
+
     console.log(
       `\n=== Cleaned vs main-structural (reference: raw strokes, minLen=${REF_MIN}pt hv-tolerant, no sweep text exclusion; mainStructuralWallSelector defaults) ===`
     )
     printMainStructuralDiagnostics(mainPick, cleanedRefCount)
+    console.log(
+      `\n--- extended structural (debug recall): ${extendedPick.rescueStats.extendedTotalCount} segments (${extendedPick.rescueStats.extendedOnlyCount} beyond strict); rule hits longHVS=${extendedPick.rescueStats.ruleHitsLongHVSingleton} band=${extendedPick.rescueStats.ruleHitsOuterBand} group=${extendedPick.rescueStats.ruleHitsLargeSpanGroup} ---`
+    )
     console.log("\n--- graph health (after junction split) ---")
     graphHealthLine("candidateGraph", wallCandidate, "(cleaned→split)")
-    graphHealthLine("mainWallGraph", wallMain, "(selected→split)")
+    graphHealthLine("strictMainWallGraph", wallMain, "(strict→split)")
+    graphHealthLine("extendedMainWallGraph", wallExtended, "(extended→split)")
+
+    const hypOpts = { maxHypothesesInPayload: 5000, maxSvgStrokesInPayload: 5000 }
+    const wallHypothesesStrict = buildArchitecturalWallHypotheses(
+      cleanedRef,
+      mainPick.selectedMainWalls,
+      allTexts,
+      bounds,
+      hypOpts
+    )
+    const wallHypothesesExtended = buildArchitecturalWallHypotheses(
+      cleanedRef,
+      extendedPick.extendedStructuralWalls,
+      allTexts,
+      bounds,
+      hypOpts
+    )
+    console.log(
+      `\n--- wall hypotheses (strict vs extended structural input): strict total=${wallHypothesesStrict.summary.totalHypotheses} (P${wallHypothesesStrict.summary.pairedCount}/M${wallHypothesesStrict.summary.mergedRunCount}/S${wallHypothesesStrict.summary.singletonCount}) | extended total=${wallHypothesesExtended.summary.totalHypotheses} (P${wallHypothesesExtended.summary.pairedCount}/M${wallHypothesesExtended.summary.mergedRunCount}/S${wallHypothesesExtended.summary.singletonCount}) | Δtotal=${wallHypothesesExtended.summary.totalHypotheses - wallHypothesesStrict.summary.totalHypotheses} ---`
+    )
+
+    const globalSpansPayload = buildGlobalStructuralSpans(robustPlan.inlierSegments, bounds, {
+      scoringEnvelope: robustPlan.robustEnvelope,
+      originalCleanedIndices: robustPlan.inlierIndices,
+    })
+    const gs = globalSpansPayload.summary
+    console.log(
+      `\n--- global structural spans: ${gs.totalSpanCount} (H${gs.orientationDistribution.horizontal}/V${gs.orientationDistribution.vertical}/D${gs.orientationDistribution.diagonal}) topLen=${gs.topBySpanLength[0]?.id ?? "—"} topShell=${gs.topByShellHintScore[0]?.id ?? "—"} ---`
+    )
 
     const svgBasename = path.basename(pdfPath, path.extname(pdfPath)) || "plan"
+    const robustSvgOverlay = {
+      rawCleanedEnvelope: robustPlan.rawCleanedEnvelope,
+      robustEnvelope: robustPlan.robustEnvelope,
+      outlierIndices: robustPlan.outlierIndices,
+    }
     console.log("")
+    if (robustPlan.summary.outlierCount > 0) {
+      const s = robustPlan.summary
+      console.log(
+        `[robust plan extent] inliers=${s.inlierCount} outliers=${s.outlierCount} | raw ${s.rawCleanedBBox.minX.toFixed(0)},${s.rawCleanedBBox.minY.toFixed(0)}–${s.rawCleanedBBox.maxX.toFixed(0)},${s.rawCleanedBBox.maxY.toFixed(0)} → robust ${s.robustEnvelope.minX.toFixed(0)},${s.robustEnvelope.minY.toFixed(0)}–${s.robustEnvelope.maxX.toFixed(0)},${s.robustEnvelope.maxY.toFixed(0)}`
+      )
+    }
+    for (const line of clusterDiag.interpretationNotes) {
+      console.log(`[drawing-cluster] ${line}`)
+    }
     writeMainStructuralWallSelectionSvg({
       projectRoot: path.resolve(process.cwd()),
       basename: svgBasename,
       cleanedSegments: cleanedRef,
       mainStructuralSplitSegments: mainSplit,
+      extendedStructuralSplitSegments: extendedSplit,
       texts: allTexts,
       pageBounds: bounds,
       sourceLabel: pdfPath,
+      robustPlanExtentOverlay: robustSvgOverlay,
+      drawingClusterDiagnosticsOverlay: clusterDiag.svgOverlay,
+    })
+
+    writeArchitecturalWallHypothesesSvg({
+      projectRoot: path.resolve(process.cwd()),
+      basename: svgBasename,
+      cleanedSegments: cleanedRef,
+      mainStructuralSplitSegments: mainSplit,
+      extendedStructuralSplitSegments: extendedSplit,
+      texts: allTexts,
+      pageBounds: bounds,
+      sourceLabel: `${pdfPath} (hypotheses from strict structural)`,
+      hypotheses: wallHypothesesStrict.hypotheses,
+      globalStructuralSpans: globalSpansPayload.spans,
+      robustPlanExtentOverlay: robustSvgOverlay,
+      drawingClusterDiagnosticsOverlay: clusterDiag.svgOverlay,
+    })
+    writeArchitecturalWallHypothesesSvg({
+      projectRoot: path.resolve(process.cwd()),
+      basename: svgBasename,
+      filenameSuffix: "-extended",
+      cleanedSegments: cleanedRef,
+      mainStructuralSplitSegments: mainSplit,
+      extendedStructuralSplitSegments: extendedSplit,
+      texts: allTexts,
+      pageBounds: bounds,
+      sourceLabel: `${pdfPath} (hypotheses from extended structural)`,
+      hypotheses: wallHypothesesExtended.hypotheses,
+      globalStructuralSpans: globalSpansPayload.spans,
+      robustPlanExtentOverlay: robustSvgOverlay,
+      drawingClusterDiagnosticsOverlay: clusterDiag.svgOverlay,
     })
   }
 }

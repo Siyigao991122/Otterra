@@ -11,6 +11,20 @@ export type PdfJsGlobalsStatus =
   | { ok: false; source: "failed"; detail: string }
 
 export function ensurePdfJsCanvasGlobals(): PdfJsGlobalsStatus {
+  const processWithBuiltin = process as typeof process & {
+    getBuiltinModule?: (id: string) => unknown
+  }
+  if (typeof processWithBuiltin.getBuiltinModule !== "function") {
+    const require = createRequire(import.meta.url)
+    processWithBuiltin.getBuiltinModule = (id: string) => {
+      try {
+        return require(id)
+      } catch {
+        return undefined
+      }
+    }
+  }
+
   if (
     typeof globalThis.DOMMatrix === "function" &&
     typeof globalThis.Path2D === "function" &&

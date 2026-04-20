@@ -21,12 +21,25 @@ import {
   Pencil,
   X,
 } from "lucide-react"
-import type { RoomDimensions, FloorPlanAnalysis, DetectedRoom, FloorplanPoint2D } from "@/lib/types"
+import type {
+  RoomDimensions,
+  FloorPlanAnalysis,
+  DetectedRoom,
+  FloorplanPoint2D,
+  RoomGeometryEnvelopeSource,
+} from "@/lib/types"
 import { isValidFootprintPolygon, polygonAABB } from "@/lib/floorplanGeometry"
 import {
   persistRoomDimensionsToSession,
   clearRoomDimensionsSession,
 } from "@/lib/roomDimensionsSession"
+import {
+  augmentPreflightWithAnalyzeHints,
+  preflightLogSummary,
+  runFloorplanPreflightFromImagePages,
+  runFloorplanPreflightFromPdf,
+} from "@/lib/floorplanPreflight"
+import type { PDFDocumentProxy } from "pdfjs-dist"
 
 interface FloorPlanUploaderProps {
   onUpload: (dimensions: RoomDimensions) => void
@@ -88,7 +101,7 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
     try {
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
       const { getDocument, GlobalWorkerOptions } = pdfjs as {
-        getDocument: (opts: { data: ArrayBuffer }) => { promise: Promise<{ numPages: number; getPage: (n: number) => Promise<unknown> }> }
+        getDocument: (opts: { data: ArrayBuffer }) => { promise: Promise<PDFDocumentProxy> }
         GlobalWorkerOptions: { workerSrc: string }
       }
 
@@ -124,6 +137,7 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
         if (!ctx) throw new Error("Could not get canvas 2d context")
 
         const renderTask = page.render({
+          canvas,
           canvasContext: ctx,
           viewport,
         })
@@ -172,21 +186,55 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
         setUploadedFile((prev) => (prev ? { ...prev, preview: images[0] } : prev))
       }
 
-      const response = await fetch("/api/analyze-floorplan", {
+      const preflightPromise = (async () => {
+        try {
+          if (file.type === "application/pdf") {
+            return await runFloorplanPreflightFromImagePages(images.length || 1)
+          }
+          return await runFloorplanPreflightFromImagePages(images.length || 1)
+        } catch (e) {
+          console.warn("[FloorPlanUploader] preflight skipped (non-fatal)", e)
+          return null
+        }
+      })()
+
+      const analyzePromise = fetch("/api/analyze-floorplan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ images }),
+      }).then(async (response) => {
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to analyze floor plan")
+        }
+        return data
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to analyze floor plan")
-      }
+      const [preflightBase, data] = await Promise.all([preflightPromise, analyzePromise])
 
       const floorPlan = data.floorPlan as FloorPlanAnalysis
 
-      setAnalysis(floorPlan)
+      let floorPlanWithDiagnostics: FloorPlanAnalysis = floorPlan
+
+      if (preflightBase) {
+        const augmented = augmentPreflightWithAnalyzeHints(preflightBase, {
+          usedFallbackRectangle: !!floorPlan._debugFloorplanGeometry?.usedFallbackRectangle,
+          floorplanConfidence: floorPlan.geometry?.confidence,
+        })
+        const preflightSource =
+          file.type === "application/pdf" ? "pdf-vector-analysis" : "image-fallback-analysis"
+        const browserSafePreflightSource =
+          file.type === "application/pdf" ? "pdf-browser-preview-analysis" : "image-fallback-analysis"
+        floorPlanWithDiagnostics = {
+          ...floorPlan,
+          _preflightDiagnostic: { preflightSource: browserSafePreflightSource, result: augmented },
+        }
+        if (process.env.NODE_ENV === "development") {
+          preflightLogSummary(augmented, `floor-plan-uploader:${browserSafePreflightSource}`)
+        }
+      }
+
+      setAnalysis(floorPlanWithDiagnostics)
       setSelectedRoomIndex(0)
 
       const synced = unitEnvelopeDimensionsFromAnalysis(floorPlan)
@@ -259,16 +307,32 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
     const shouldDropGeometry =
       manuallyChangedFromAnalysis && analysis?.geometry != null
 
+    let geometryEnvelopeSource: RoomGeometryEnvelopeSource
+    if (shouldDropGeometry) {
+      geometryEnvelopeSource = "fallback-rectangle"
+    } else if (analysis?._debugFloorplanGeometry?.usedFallbackRectangle) {
+      geometryEnvelopeSource = "fallback-rectangle"
+    } else if (
+      analysis?.geometry?.footprintPolygon &&
+      isValidFootprintPolygon(analysis.geometry.footprintPolygon)
+    ) {
+      geometryEnvelopeSource = "ai-derived"
+    } else {
+      geometryEnvelopeSource = "fallback-rectangle"
+    }
+
     // TODO: rescale footprintPolygon (and interior walls) to match edited width/depth/height instead of dropping geometry.
     const dimensions: RoomDimensions = shouldDropGeometry
       ? {
           width: manualDimensions.width,
           depth: manualDimensions.depth,
           height: manualDimensions.height,
+          geometryEnvelopeSource,
         }
       : {
           ...manualDimensions,
           ...(analysis?.geometry ? { geometry: analysis.geometry } : {}),
+          geometryEnvelopeSource,
         }
 
     // Phase 2+: /room may read selectedZoneIndex for default camera / zone highlight.
@@ -543,6 +607,43 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
                               </p>
                             )}
                           </>
+                        )
+                      })()}
+                      {process.env.NODE_ENV === "development" && analysis._preflightDiagnostic && (() => {
+                        const { preflightSource, result: pr } = analysis._preflightDiagnostic
+                        const sourceLabel =
+                          preflightSource === "pdf-vector-analysis"
+                            ? "PDF vector analysis (full preflight on bytes)"
+                            : preflightSource === "pdf-browser-preview-analysis"
+                              ? "PDF browser preview analysis (client-safe placeholder preflight)"
+                            : "Image fallback analysis (placeholder primitives only)"
+                        const risksTop = pr.risks.slice(0, 4)
+                        return (
+                          <div className="mt-3 rounded-md border border-cyan-600/40 bg-cyan-950/20 dark:bg-cyan-950/35 px-2 py-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                              Preflight (debug)
+                            </p>
+                            <p className="text-[10px] text-cyan-900/90 dark:text-cyan-200/90 mt-1 font-mono break-words">
+                              Source: {sourceLabel}
+                            </p>
+                            <p className="text-[10px] font-mono text-cyan-900 dark:text-cyan-100/95 mt-1 break-words">
+                              readinessTier={pr.readinessTier} · geometryFirst={pr.geometryFirstSuitability} · precision=
+                              {pr.precisionSuitability} · recommendedMode={pr.recommendedMode}
+                            </p>
+                            <p className="text-[10px] font-mono text-cyan-800/95 dark:text-cyan-200/85 mt-1">
+                              score={pr.readinessScore} · {pr.logLine}
+                            </p>
+                            {risksTop.length > 0 ? (
+                              <ul className="mt-1.5 text-[10px] font-mono list-disc pl-4 text-cyan-900 dark:text-cyan-100/90 space-y-0.5">
+                                {risksTop.map((r, i) => (
+                                  <li key={`${i}-${r.slice(0, 40)}`}>{r}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-[10px] font-mono mt-1 text-cyan-800 dark:text-cyan-200/80">risks: none flagged</p>
+                            )}
+                            <p className="text-[10px] text-muted-foreground mt-1.5 leading-snug">{pr.summary}</p>
+                          </div>
                         )
                       })()}
                     </div>

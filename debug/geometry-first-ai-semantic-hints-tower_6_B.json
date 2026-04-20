@@ -1,0 +1,430 @@
+{
+  "pageType": "residential_brochure_floorplan",
+  "unitOutlineHint": {
+    "renderedImageVertices": [
+      {
+        "x": 368,
+        "y": 44
+      },
+      {
+        "x": 1240,
+        "y": 44
+      },
+      {
+        "x": 1240,
+        "y": 1045
+      },
+      {
+        "x": 368,
+        "y": 1045
+      },
+      {
+        "x": 368,
+        "y": 634
+      },
+      {
+        "x": 558,
+        "y": 634
+      },
+      {
+        "x": 558,
+        "y": 434
+      },
+      {
+        "x": 368,
+        "y": 434
+      }
+    ],
+    "pdfPageVertices": [
+      {
+        "x": 184,
+        "y": 22
+      },
+      {
+        "x": 620,
+        "y": 22
+      },
+      {
+        "x": 620,
+        "y": 522.5
+      },
+      {
+        "x": 184,
+        "y": 522.5
+      },
+      {
+        "x": 184,
+        "y": 317
+      },
+      {
+        "x": 279,
+        "y": 317
+      },
+      {
+        "x": 279,
+        "y": 217
+      },
+      {
+        "x": 184,
+        "y": 217
+      }
+    ],
+    "confidence": 0.9,
+    "notes": "The unit outline follows the visible apartment shell, including notches and protrusions."
+  },
+  "majorSpaces": [
+    {
+      "label": "PRIMARY BEDROOM",
+      "spaceType": "enclosed_room",
+      "renderedImagePolygon": [
+        {
+          "x": 378,
+          "y": 734
+        },
+        {
+          "x": 558,
+          "y": 734
+        },
+        {
+          "x": 558,
+          "y": 884
+        },
+        {
+          "x": 378,
+          "y": 884
+        }
+      ],
+      "pdfPagePolygon": [
+        {
+          "x": 189,
+          "y": 367
+        },
+        {
+          "x": 279,
+          "y": 367
+        },
+        {
+          "x": 279,
+          "y": 442
+        },
+        {
+          "x": 189,
+          "y": 442
+        }
+      ],
+      "confidence": 0.9
+    },
+    {
+      "label": "BEDROOM 2",
+      "spaceType": "enclosed_room",
+      "renderedImagePolygon": [
+        {
+          "x": 1058,
+          "y": 834
+        },
+        {
+          "x": 1238,
+          "y": 834
+        },
+        {
+          "x": 1238,
+          "y": 984
+        },
+        {
+          "x": 1058,
+          "y": 984
+        }
+      ],
+      "pdfPagePolygon": [
+        {
+          "x": 529,
+          "y": 417
+        },
+        {
+          "x": 619,
+          "y": 417
+        },
+        {
+          "x": 619,
+          "y": 492
+        },
+        {
+          "x": 529,
+          "y": 492
+        }
+      ],
+      "confidence": 0.9
+    },
+    {
+      "label": "STUDY",
+      "spaceType": "enclosed_room",
+      "renderedImagePolygon": [
+        {
+          "x": 958,
+          "y": 534
+        },
+        {
+          "x": 1058,
+          "y": 534
+        },
+        {
+          "x": 1058,
+          "y": 634
+        },
+        {
+          "x": 958,
+          "y": 634
+        }
+      ],
+      "pdfPagePolygon": [
+        {
+          "x": 479,
+          "y": 267
+        },
+        {
+          "x": 529,
+          "y": 267
+        },
+        {
+          "x": 529,
+          "y": 317
+        },
+        {
+          "x": 479,
+          "y": 317
+        }
+      ],
+      "confidence": 0.9
+    },
+    {
+      "label": "FAMILY ROOM",
+      "spaceType": "enclosed_room",
+      "renderedImagePolygon": [
+        {
+          "x": 958,
+          "y": 134
+        },
+        {
+          "x": 1238,
+          "y": 134
+        },
+        {
+          "x": 1238,
+          "y": 334
+        },
+        {
+          "x": 958,
+          "y": 334
+        }
+      ],
+      "pdfPagePolygon": [
+        {
+          "x": 479,
+          "y": 67
+        },
+        {
+          "x": 619,
+          "y": 67
+        },
+        {
+          "x": 619,
+          "y": 167
+        },
+        {
+          "x": 479,
+          "y": 167
+        }
+      ],
+      "confidence": 0.9
+    }
+  ],
+  "sharedOpenPlanEnvelopes": [
+    {
+      "memberLabels": [
+        "KITCHEN",
+        "LIVING / DINING"
+      ],
+      "renderedImagePolygon": [
+        {
+          "x": 558,
+          "y": 434
+        },
+        {
+          "x": 958,
+          "y": 434
+        },
+        {
+          "x": 958,
+          "y": 734
+        },
+        {
+          "x": 558,
+          "y": 734
+        }
+      ],
+      "pdfPagePolygon": [
+        {
+          "x": 279,
+          "y": 217
+        },
+        {
+          "x": 479,
+          "y": 217
+        },
+        {
+          "x": 479,
+          "y": 367
+        },
+        {
+          "x": 279,
+          "y": 367
+        }
+      ],
+      "confidence": 0.9
+    }
+  ],
+  "auxiliarySpaces": [
+    {
+      "label": "FOYER",
+      "renderedImagePolygon": [
+        {
+          "x": 378,
+          "y": 634
+        },
+        {
+          "x": 558,
+          "y": 634
+        },
+        {
+          "x": 558,
+          "y": 734
+        },
+        {
+          "x": 378,
+          "y": 734
+        }
+      ],
+      "pdfPagePolygon": [
+        {
+          "x": 189,
+          "y": 317
+        },
+        {
+          "x": 279,
+          "y": 317
+        },
+        {
+          "x": 279,
+          "y": 367
+        },
+        {
+          "x": 189,
+          "y": 367
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "label": "PRIMARY BATH",
+      "renderedImagePolygon": [
+        {
+          "x": 558,
+          "y": 884
+        },
+        {
+          "x": 758,
+          "y": 884
+        },
+        {
+          "x": 758,
+          "y": 984
+        },
+        {
+          "x": 558,
+          "y": 984
+        }
+      ],
+      "pdfPagePolygon": [
+        {
+          "x": 279,
+          "y": 442
+        },
+        {
+          "x": 379,
+          "y": 442
+        },
+        {
+          "x": 379,
+          "y": 492
+        },
+        {
+          "x": 279,
+          "y": 492
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "label": "BATH",
+      "renderedImagePolygon": [
+        {
+          "x": 1058,
+          "y": 634
+        },
+        {
+          "x": 1158,
+          "y": 634
+        },
+        {
+          "x": 1158,
+          "y": 734
+        },
+        {
+          "x": 1058,
+          "y": 734
+        }
+      ],
+      "pdfPagePolygon": [
+        {
+          "x": 529,
+          "y": 317
+        },
+        {
+          "x": 579,
+          "y": 317
+        },
+        {
+          "x": 579,
+          "y": 367
+        },
+        {
+          "x": 529,
+          "y": 367
+        }
+      ],
+      "confidence": 0.8
+    }
+  ],
+  "notes": [
+    "The main apartment plan is centrally located and should be isolated from surrounding text and images.",
+    "The crop should exclude the tower image, text descriptions, and any logos or disclaimers.",
+    "AI crop intersected with deterministic geometry crop.",
+    "[validation] unit_outline_hint is nearly rectangular while deterministic unit shell evidence appears non-rectangular.",
+    "Rendered full page at 1584x1224 px.",
+    "Mapped rendered-image pixels back to PDF page coordinates using page bounds 792.0x612.0."
+  ],
+  "modelUsed": "gpt-4o",
+  "renderPx": {
+    "width": 1584,
+    "height": 1224
+  },
+  "cropRectPx": {
+    "x": 358,
+    "y": 34,
+    "width": 892,
+    "height": 1021
+  },
+  "latencyMs": 9408,
+  "passAResponse": "{\"page_type\":\"residential_brochure_floorplan\",\"crop_rect\":{\"x\":358,\"y\":34,\"width\":892,\"height\":1021,\"confidence\":0.95},\"notes\":[\"The main apartment plan is centrally located and should be isolated from surrounding text and images.\",\"The crop should exclude the tower image, text descriptions, and any logos or disclaimers.\"]}",
+  "passBResponse": "{\"unit_outline_hint\":{\"vertices\":[{\"x\":10,\"y\":10},{\"x\":882,\"y\":10},{\"x\":882,\"y\":1011},{\"x\":10,\"y\":1011},{\"x\":10,\"y\":600},{\"x\":200,\"y\":600},{\"x\":200,\"y\":400},{\"x\":10,\"y\":400}],\"confidence\":0.9,\"notes\":\"The unit outline follows the visible apartment shell, including notches and protrusions.\"},\"major_spaces\":[{\"label\":\"PRIMARY BEDROOM\",\"space_type\":\"enclosed_room\",\"polygon\":[{\"x\":20,\"y\":700},{\"x\":200,\"y\":700},{\"x\":200,\"y\":850},{\"x\":20,\"y\":850}],\"confidence\":0.9},{\"label\":\"BEDROOM 2\",\"space_type\":\"enclosed_room\",\"polygon\":[{\"x\":700,\"y\":800},{\"x\":880,\"y\":800},{\"x\":880,\"y\":950},{\"x\":700,\"y\":950}],\"confidence\":0.9},{\"label\":\"STUDY\",\"space_type\":\"enclosed_room\",\"polygon\":[{\"x\":600,\"y\":500},{\"x\":700,\"y\":500},{\"x\":700,\"y\":600},{\"x\":600,\"y\":600}],\"confidence\":0.9},{\"label\":\"FAMILY ROOM\",\"space_type\":\"enclosed_room\",\"polygon\":[{\"x\":600,\"y\":100},{\"x\":880,\"y\":100},{\"x\":880,\"y\":300},{\"x\":600,\"y\":300}],\"confidence\":0.9}],\"shared_open_plan_envelopes\":[{\"member_labels\":[\"KITCHEN\",\"LIVING / DINING\"],\"polygon\":[{\"x\":200,\"y\":400},{\"x\":600,\"y\":400},{\"x\":600,\"y\":700},{\"x\":200,\"y\":700}],\"confidence\":0.9}],\"auxiliary_spaces\":[{\"label\":\"FOYER\",\"polygon\":[{\"x\":20,\"y\":600},{\"x\":200,\"y\":600},{\"x\":200,\"y\":700},{\"x\":20,\"y\":700}],\"confidence\":0.8},{\"label\":\"PRIMARY BATH\",\"polygon\":[{\"x\":200,\"y\":850},{\"x\":400,\"y\":850},{\"x\":400,\"y\":950},{\"x\":200,\"y\":950}],\"confidence\":0.8},{\"label\":\"BATH\",\"polygon\":[{\"x\":700,\"y\":600},{\"x\":800,\"y\":600},{\"x\":800,\"y\":700},{\"x\":700,\"y\":700}],\"confidence\":0.8}],\"notes\":[]}"
+}

@@ -1,0 +1,230 @@
+{
+  "unit_outline_hint": {
+    "vertices": [
+      {
+        "x": 10,
+        "y": 10
+      },
+      {
+        "x": 882,
+        "y": 10
+      },
+      {
+        "x": 882,
+        "y": 1011
+      },
+      {
+        "x": 10,
+        "y": 1011
+      },
+      {
+        "x": 10,
+        "y": 600
+      },
+      {
+        "x": 200,
+        "y": 600
+      },
+      {
+        "x": 200,
+        "y": 400
+      },
+      {
+        "x": 10,
+        "y": 400
+      }
+    ],
+    "confidence": 0.9,
+    "notes": "The unit outline follows the visible apartment shell, including notches and protrusions."
+  },
+  "major_spaces": [
+    {
+      "label": "PRIMARY BEDROOM",
+      "space_type": "enclosed_room",
+      "polygon": [
+        {
+          "x": 20,
+          "y": 700
+        },
+        {
+          "x": 200,
+          "y": 700
+        },
+        {
+          "x": 200,
+          "y": 850
+        },
+        {
+          "x": 20,
+          "y": 850
+        }
+      ],
+      "confidence": 0.9
+    },
+    {
+      "label": "BEDROOM 2",
+      "space_type": "enclosed_room",
+      "polygon": [
+        {
+          "x": 700,
+          "y": 800
+        },
+        {
+          "x": 880,
+          "y": 800
+        },
+        {
+          "x": 880,
+          "y": 950
+        },
+        {
+          "x": 700,
+          "y": 950
+        }
+      ],
+      "confidence": 0.9
+    },
+    {
+      "label": "STUDY",
+      "space_type": "enclosed_room",
+      "polygon": [
+        {
+          "x": 600,
+          "y": 500
+        },
+        {
+          "x": 700,
+          "y": 500
+        },
+        {
+          "x": 700,
+          "y": 600
+        },
+        {
+          "x": 600,
+          "y": 600
+        }
+      ],
+      "confidence": 0.9
+    },
+    {
+      "label": "FAMILY ROOM",
+      "space_type": "enclosed_room",
+      "polygon": [
+        {
+          "x": 600,
+          "y": 100
+        },
+        {
+          "x": 880,
+          "y": 100
+        },
+        {
+          "x": 880,
+          "y": 300
+        },
+        {
+          "x": 600,
+          "y": 300
+        }
+      ],
+      "confidence": 0.9
+    }
+  ],
+  "shared_open_plan_envelopes": [
+    {
+      "member_labels": [
+        "KITCHEN",
+        "LIVING / DINING"
+      ],
+      "polygon": [
+        {
+          "x": 200,
+          "y": 400
+        },
+        {
+          "x": 600,
+          "y": 400
+        },
+        {
+          "x": 600,
+          "y": 700
+        },
+        {
+          "x": 200,
+          "y": 700
+        }
+      ],
+      "confidence": 0.9
+    }
+  ],
+  "auxiliary_spaces": [
+    {
+      "label": "FOYER",
+      "polygon": [
+        {
+          "x": 20,
+          "y": 600
+        },
+        {
+          "x": 200,
+          "y": 600
+        },
+        {
+          "x": 200,
+          "y": 700
+        },
+        {
+          "x": 20,
+          "y": 700
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "label": "PRIMARY BATH",
+      "polygon": [
+        {
+          "x": 200,
+          "y": 850
+        },
+        {
+          "x": 400,
+          "y": 850
+        },
+        {
+          "x": 400,
+          "y": 950
+        },
+        {
+          "x": 200,
+          "y": 950
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "label": "BATH",
+      "polygon": [
+        {
+          "x": 700,
+          "y": 600
+        },
+        {
+          "x": 800,
+          "y": 600
+        },
+        {
+          "x": 800,
+          "y": 700
+        },
+        {
+          "x": 700,
+          "y": 700
+        }
+      ],
+      "confidence": 0.8
+    }
+  ],
+  "notes": []
+}

@@ -54,6 +54,7 @@ const EMPTY_OUTER_CYCLE_TRACE: OuterCycleTraceDebug = {
   startNodeIndex: -1,
   startDirectedTo: -1,
   vertexSample: [],
+  fullVertexCycle: undefined,
   notes: [],
   multiSeed: {
     maxDirectedSeeds: 0,

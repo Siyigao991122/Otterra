@@ -18,7 +18,7 @@ import {
   type SetStateAction,
 } from "react"
 import { Canvas, useThree, useFrame } from "@react-three/fiber"
-import { OrbitControls, Grid, Environment, Html, PerspectiveCamera } from "@react-three/drei"
+import { OrbitControls, Grid, Environment, Html, PerspectiveCamera, Billboard } from "@react-three/drei"
 import * as THREE from "three"
 import type { FloorplanPoint2D, FloorplanWallSegment, Furniture, RoomDimensions } from "@/lib/types"
 import { isValidFootprintPolygon, polygonAABB } from "@/lib/floorplanGeometry"
@@ -31,6 +31,12 @@ import {
   normalizeGlbBboxInfo,
   type GlbBboxInfo,
 } from "@/components/furniture-model"
+import {
+  resolveRoomGeometryEnvelopeSource,
+  roomGeometrySourceDisplayTag,
+  roomFootprintHorizontalExtentsM,
+  roomLabelWorldPosition,
+} from "@/lib/roomGeometryEnvelope"
 import { Button } from "./ui/button"
 import { RotateCw, Trash2, Move } from "lucide-react"
 
@@ -428,6 +434,96 @@ function DropPlane({
   )
 }
 
+/** In-scene size trust label (billboarded for orbit + plan readability). */
+function FurnitureInSceneDimensionLabel({
+  furniture,
+  glbBbox,
+  debug,
+}: {
+  furniture: Furniture
+  glbBbox: GlbBboxInfo | null | undefined
+  debug?: boolean
+}) {
+  const fmt = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : "—")
+  const { depth: L, width: W, height: H } = furniture.dimensions
+  const dimsTrust =
+    furniture.dimensionsAuthoritative === true
+      ? "Dims: catalog (authoritative)"
+      : "Dims: fallback / proxy box"
+
+  return (
+    <Billboard position={[0, furniture.dimensions.height + 0.34, 0]}>
+      <Html center transform className="pointer-events-none select-none">
+        <div className="rounded-md bg-black/80 text-white text-[11px] leading-snug px-2 py-1.5 shadow-lg max-w-[240px] font-mono border border-white/12 [text-shadow:0_1px_2px_rgba(0,0,0,0.85)]">
+          <div className="text-[10px] text-white/75 truncate" title={furniture.name}>
+            {furniture.name}
+          </div>
+          <div className="font-semibold text-amber-100/95 tracking-tight mt-0.5">
+            {fmt(L)} × {fmt(W)} × {fmt(H)} m
+          </div>
+          <div className="text-[10px] text-white/70 mt-0.5">
+            length × width × height (meters)
+          </div>
+          <div className="text-[10px] text-emerald-200/90 mt-1">{dimsTrust}</div>
+          {debug && glbBbox ? (
+            <div className="text-[10px] text-cyan-200/90 mt-1 pt-1 border-t border-white/15">
+              GLB calibration: {glbBbox.calibrationMode}
+              {glbBbox.suspiciousCalibration
+                ? ` · suspicious: ${glbBbox.suspiciousReason ?? "?"}`
+                : ""}
+            </div>
+          ) : null}
+        </div>
+      </Html>
+    </Billboard>
+  )
+}
+
+/** Shown when no furniture is selected: room envelope + geometry source. */
+function RoomEnvelopeInSceneLabel({
+  roomDimensions,
+  debug,
+}: {
+  roomDimensions: RoomDimensions
+  debug?: boolean
+}) {
+  const pos = roomLabelWorldPosition(roomDimensions, 0.24)
+  const { widthM, depthM } = roomFootprintHorizontalExtentsM(roomDimensions)
+  const h = roomDimensions.height
+  const src = resolveRoomGeometryEnvelopeSource(roomDimensions)
+  const tag = roomGeometrySourceDisplayTag(src)
+  const fmt = (n: number) => n.toFixed(2)
+  const fp = roomDimensions.geometry?.footprintPolygon
+  const polyShell = fp != null && isValidFootprintPolygon(fp)
+
+  return (
+    <Billboard position={pos}>
+      <Html center transform className="pointer-events-none select-none">
+        <div className="rounded-md bg-black/80 text-white text-[11px] leading-snug px-2.5 py-1.5 shadow-lg max-w-[260px] font-mono border border-violet-400/25 [text-shadow:0_1px_2px_rgba(0,0,0,0.85)]">
+          <div className="font-semibold text-violet-100/95">Room envelope</div>
+          <div className="text-amber-100/95 mt-0.5">
+            {fmt(widthM)} × {fmt(depthM)} × {fmt(h)} m
+          </div>
+          <div className="text-[10px] text-white/70 mt-0.5">width × depth × height</div>
+          {polyShell ? (
+            <div className="text-[10px] text-white/65 mt-1">
+              Footprint: polygon shell (overall AABB above)
+            </div>
+          ) : (
+            <div className="text-[10px] text-white/65 mt-1">Footprint: axis-aligned rectangle</div>
+          )}
+          <div className="text-[10px] text-sky-200/90 mt-1 pt-1 border-t border-white/12">
+            Source: <span className="font-semibold">{tag}</span>
+          </div>
+          {debug ? (
+            <div className="text-[10px] text-white/55 mt-0.5">raw key: {src}</div>
+          ) : null}
+        </div>
+      </Html>
+    </Billboard>
+  )
+}
+
 function SelectionControls({
   furniture,
   onRotate,
@@ -461,6 +557,7 @@ function DraggableFurniture({
   product,
   isSelected,
   debug,
+  glbBbox,
   onSelect,
   onMove,
   onRotate,
@@ -474,6 +571,7 @@ function DraggableFurniture({
   product?: Product | null
   isSelected: boolean
   debug?: boolean
+  glbBbox?: GlbBboxInfo | null
   onSelect: () => void
   onMove: (pos: [number, number, number]) => void
   onRotate: () => void
@@ -567,6 +665,9 @@ function DraggableFurniture({
         isSelected={isSelected}
         onBboxReady={isSelected ? onBboxReady : undefined}
       />
+      {isSelected && (
+        <FurnitureInSceneDimensionLabel furniture={furniture} glbBbox={glbBbox} debug={debug} />
+      )}
       {isSelected && <SelectionControls furniture={furniture} onRotate={onRotate} onDelete={onDelete} />}
       {isSelected && debug && (
         <Html position={[0, furniture.dimensions.height + 0.2, 0]} center>
@@ -790,6 +891,10 @@ function Scene({
 
       <Room dimensions={roomDimensions} />
 
+      {selectedId == null && !isDragging && (
+        <RoomEnvelopeInSceneLabel roomDimensions={roomDimensions} debug={debug} />
+      )}
+
       <Grid
         args={[roomDimensions.width, roomDimensions.depth]}
         position={[0, 0.01, 0]}
@@ -815,6 +920,11 @@ function Scene({
           product={product}
           isSelected={selectedId === furniture.id}
           debug={debug}
+          glbBbox={
+            selectedId === furniture.id && bboxForSelection?.id === selectedId
+              ? bboxForSelection.bbox
+              : null
+          }
           onSelect={() => onSelectFurniture(furniture.id)}
           onMove={(pos) => onMoveFurniture(furniture.id, pos)}
           onRotate={() => {}}
@@ -874,11 +984,22 @@ function DebugDimensionOverlay({ data }: { data: DebugOverlayData }) {
       {bbox ? (
         <>
           <div>
+            Target (m) X/Y/Z: {bbox.target.x.toFixed(3)} / {bbox.target.y.toFixed(3)} / {bbox.target.z.toFixed(3)}
+          </div>
+          <div>Mode: {bbox.calibrationMode}</div>
+          <div>
             GLB raw: x={bbox.raw.x.toFixed(3)} y={bbox.raw.y.toFixed(3)} z={bbox.raw.z.toFixed(3)}
           </div>
-          <div>GLB scale: {bbox.scale.toFixed(4)}</div>
+          <div>
+            Scale axis: sx={bbox.scaleAxis.x.toFixed(4)} sy={bbox.scaleAxis.y.toFixed(4)} sz={bbox.scaleAxis.z.toFixed(4)}
+          </div>
+          <div>Scale (geom. mean): {bbox.scale.toFixed(4)}</div>
           <div>
             GLB scaled: x={bbox.scaled.x.toFixed(3)} y={bbox.scaled.y.toFixed(3)} z={bbox.scaled.z.toFixed(3)}
+          </div>
+          <div className={bbox.suspiciousCalibration ? "text-amber-300 font-semibold" : ""}>
+            Sanity: suspiciousCalibration={String(bbox.suspiciousCalibration)}
+            {bbox.suspiciousReason != null ? ` reason=${bbox.suspiciousReason}` : ""}
           </div>
         </>
       ) : (

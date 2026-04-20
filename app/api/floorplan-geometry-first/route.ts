@@ -1,10 +1,11 @@
 import { Buffer } from "node:buffer"
 import { NextResponse } from "next/server"
+import { buildFloorplanAiSemanticHints } from "@/lib/geometryFirst/floorplanAiSemanticHints"
 import { buildGeometryFirstDebugPayload } from "@/lib/geometryFirst/debugPayload"
 import { runGeometryFirstExtraction } from "@/lib/geometryFirst/extractPlanPrimitives"
 import type { WallCandidateAngleMode } from "@/lib/geometryFirst/linePrimitiveDenoise"
 
-export const maxDuration = 60
+export const maxDuration = 120
 
 function decodePdfBase64(dataUrlOrB64: string): Uint8Array | null {
   const s = dataUrlOrB64.trim()
@@ -32,6 +33,8 @@ function decodePdfBase64(dataUrlOrB64: string): Uint8Array | null {
  *     wallCandidateSampleLimit?: number,
  *     wallCandidateMinLengthPdfUnits?: number (PDF units, default 3),
  *     wallCandidateAngleMode?: "none" | "hv" | "hv45" (default "hv")
+ *     includeMainPlanBody?: boolean (experimental: primary plan bbox + SVG + plan-only reruns + shell candidate + shell loop + boundary v2/v3 + shell regularization + evidence gating + room candidates v0 + room cleanup v1 + room split refinement v2/v3 + room candidate refinement v1 + plan-body text coverage recovery v2 + room text attribution v0 + room text grouping v1 + semantic-guided room partition v1 + proposal topology cleanup v1 + anchor seed localization v1 + hierarchical space typing v1/v2 + unit outer boundary recovery v1 + anchor constrained region growing v2 in _debugGeometryFirst)
+ *     includeAiSemanticHints?: boolean (experimental: full-page render + crop-first GPT-4o semantic hints in _debugGeometryFirst.aiSemanticHints)
  *   }
  * }
  */
@@ -45,6 +48,8 @@ export async function POST(req: Request) {
       wallCandidateSampleLimit?: number
       wallCandidateMinLengthPdfUnits?: number
       wallCandidateAngleMode?: WallCandidateAngleMode
+      includeMainPlanBody?: boolean
+      includeAiSemanticHints?: boolean
     }
   }
   try {
@@ -64,7 +69,39 @@ export async function POST(req: Request) {
 
   const imagePageCount = typeof body.imagePageCount === "number" ? body.imagePageCount : undefined
 
-  const result = await runGeometryFirstExtraction({ pdfBytes, imagePageCount })
-  result._debugGeometryFirst = buildGeometryFirstDebugPayload(result.primitives, body.debug)
+  const extractionPdfBytes = pdfBytes ? new Uint8Array(pdfBytes) : null
+  const aiPdfBytes = pdfBytes ? new Uint8Array(pdfBytes) : null
+
+  const result = await runGeometryFirstExtraction({ pdfBytes: extractionPdfBytes, imagePageCount })
+  let debugPayload = await buildGeometryFirstDebugPayload(result.primitives, {
+    ...body.debug,
+    pdfBytes: pdfBytes ? new Uint8Array(pdfBytes) : undefined,
+  })
+
+  if (body.debug?.includeAiSemanticHints && aiPdfBytes) {
+    try {
+      const aiSemanticHints = await buildFloorplanAiSemanticHints(aiPdfBytes, {
+        pageIndex: 0,
+        renderScale: 2,
+        maxEdgePx: 1800,
+        mainPlanBodyBBox: debugPayload.mainPlanBody?.primaryLayoutBBox ?? null,
+        recoveredUnitPolygon: debugPayload.unitOuterBoundaryRecoveryV1?.recoveredUnitPolygon ?? null,
+      }) ?? undefined
+      if (aiSemanticHints) {
+        debugPayload = await buildGeometryFirstDebugPayload(result.primitives, {
+          ...body.debug,
+          aiSemanticHints,
+          pdfBytes: pdfBytes ? new Uint8Array(pdfBytes) : undefined,
+        })
+        debugPayload.aiSemanticHints = aiSemanticHints
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      debugPayload.interpretationNotes.push(
+        `[ai-semantic-hints] failed: ${message}`
+      )
+    }
+  }
+  result._debugGeometryFirst = debugPayload
   return NextResponse.json(result)
 }

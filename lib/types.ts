@@ -41,6 +41,14 @@ export interface FloorplanGeometry {
   confidence?: number
 }
 
+/** Provenance for the static room envelope (optional; session + labels). */
+export type RoomGeometryEnvelopeSource =
+  | "geometry-first"
+  | "ai-derived"
+  | "fallback-rectangle"
+  | "manual-url"
+  | "unknown"
+
 export interface RoomDimensions {
   width: number
   depth: number
@@ -51,6 +59,11 @@ export interface RoomDimensions {
    * / authoring hints for grids, AI layout, and URL params.
    */
   geometry?: FloorplanGeometry
+  /**
+   * How the unit envelope was produced (floor-plan uploader, URL defaults, future geometry-first, etc.).
+   * When omitted, the scene may infer a display tag for legacy sessions.
+   */
+  geometryEnvelopeSource?: RoomGeometryEnvelopeSource
 }
 
 /**
@@ -73,6 +86,12 @@ export interface Furniture {
   rotation: number
   /** GLB URL for real 3D model; if absent, proxy box is used */
   model_url?: string | null
+  /**
+   * When true, GLB root is scaled per-axis so AABB matches `dimensions` exactly.
+   * Set for catalog-backed sizes (width_m / height_m / length_m → scene X/Y/Z).
+   * When false/omitted, GLB uses uniform “fit inside” scaling (legacy proxy sizing).
+   */
+  dimensionsAuthoritative?: boolean
 }
 
 export interface DetectedRoom {
@@ -109,6 +128,12 @@ export interface FloorplanFootprintDebugInfo {
   interiorWalls?: InteriorWallSanitizeStats
 }
 
+/** Client-side floorplan preflight (vector PDF vs image path); attached after analyze for internal QA. */
+export interface FloorplanPreflightDiagnosticAttachment {
+  preflightSource: "pdf-vector-analysis" | "pdf-browser-preview-analysis" | "image-fallback-analysis"
+  result: import("@/lib/floorplanPreflight").FloorplanPreflightResult
+}
+
 export interface FloorPlanAnalysis {
   rooms: DetectedRoom[]
   totalWidthMeters: number
@@ -119,4 +144,6 @@ export interface FloorPlanAnalysis {
   geometry?: FloorplanGeometry
   /** TEMPORARY */
   _debugFloorplanGeometry?: FloorplanFootprintDebugInfo
+  /** Preflight diagnostic from `lib/floorplanPreflight` (upload flow); not used for layout logic. */
+  _preflightDiagnostic?: FloorplanPreflightDiagnosticAttachment
 }

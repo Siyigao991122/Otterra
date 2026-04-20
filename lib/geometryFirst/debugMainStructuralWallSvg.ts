@@ -9,8 +9,10 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 
 import type { ExtractedLineSegment, ExtractedTextRun, PlanBoundingBox } from "@/lib/geometryFirst/types"
+import { segmentsNearlyEqual } from "@/lib/geometryFirst/architecturalWallHypotheses"
 import type { WallGraphFoundationOptions } from "@/lib/geometryFirst/wallGraphFoundation"
 import { computeWallSegmentTopComponentRanks } from "@/lib/geometryFirst/wallGraphFoundation"
+import type { DrawingClusterDiagnosticsSvgOverlay } from "@/lib/geometryFirst/drawingClusterDiagnostics"
 
 const DEBUG_DIR_NAME = "debug"
 const DEFAULT_BASENAME = "last-pdf"
@@ -29,14 +31,40 @@ const COLOR_TEXT_BOX = "#9e9e9e"
 const COLOR_PAGE_BOUNDS = "#7b1fa2"
 const COLOR_SELECTED_BBOX = "#ef6c00"
 const COLOR_CORNER_MARKER = "#e91e63"
+/** Extended structural only (rescued beyond strict) — debug */
+const COLOR_EXTENDED_ONLY = "#00838f"
+/** Robust extent overlay: raw union bbox vs robust envelope */
+const COLOR_RAW_CLEANED_BBOX = "#e57373"
+const COLOR_ROBUST_ENVELOPE = "#43a047"
+/** Outlier strokes (faint) */
+const COLOR_OUTLIER_STROKE = "#ffab91"
 
 /** User-space stroke widths (non-scaling vs viewport). */
 const SW_CLEANED = 2.5
+const SW_EXTENDED_ONLY = 2.85
 const SW_SELECTED_RANK = 4.5
 const SW_SELECTED_DIM = 3.5
 const SW_BOUNDS = 2.25
 const SW_TEXT = 2
 const SW_MARKER = 3.5
+const SW_ROBUST_OVERLAY = 1.85
+const SW_OUTLIER = 1.2
+const COLOR_DIAG_LARGEST_CLUSTER = "#0277bd"
+const COLOR_DIAG_ROBUST_CORE = "#1b5e20"
+const COLOR_DIAG_ENVELOPE_GUIDE = "#7cb342"
+const COLOR_DIAG_EXCLUDED_LONG = "#d50000"
+const COLOR_DIAG_EXCLUDED_OTHER = "#bdbdbd"
+const SW_DIAG_RECT = 1.65
+const SW_DIAG_LONG = 3.85
+const SW_DIAG_OTHER = 1.35
+
+/** Debug: compare raw cleaned AABB vs robust envelope; faint outlier strokes. */
+export interface RobustPlanExtentSvgOverlay {
+  rawCleanedEnvelope: PlanBoundingBox
+  robustEnvelope: PlanBoundingBox
+  /** Indices into `cleanedSegments`. */
+  outlierIndices: number[]
+}
 
 export interface MainStructuralWallSvgDebugMeta {
   pageBounds: PlanBoundingBox
@@ -76,7 +104,7 @@ function expandedTextRect(
   }
 }
 
-function unionSegmentBbox(segments: ExtractedLineSegment[]): PlanBoundingBox | null {
+export function unionSegmentBbox(segments: ExtractedLineSegment[]): PlanBoundingBox | null {
   if (segments.length === 0) return null
   let minX = Infinity
   let minY = Infinity
@@ -107,7 +135,7 @@ function boundsFromTexts(texts: ExtractedTextRun[]): PlanBoundingBox | null {
   return { minX, minY, maxX, maxY }
 }
 
-function isFiniteBox(b: PlanBoundingBox): boolean {
+export function isFiniteBox(b: PlanBoundingBox): boolean {
   return (
     Number.isFinite(b.minX) &&
     Number.isFinite(b.minY) &&
@@ -128,6 +156,44 @@ function unionBoxes(a: PlanBoundingBox, b: PlanBoundingBox | null | undefined): 
   }
 }
 
+function unionFiniteBoxes(a: PlanBoundingBox | null, b: PlanBoundingBox | null): PlanBoundingBox | null {
+  if (a != null && isFiniteBox(a) && b != null && isFiniteBox(b)) {
+    return {
+      minX: Math.min(a.minX, b.minX),
+      minY: Math.min(a.minY, b.minY),
+      maxX: Math.max(a.maxX, b.maxX),
+      maxY: Math.max(a.maxY, b.maxY),
+    }
+  }
+  if (a != null && isFiniteBox(a)) return { ...a }
+  if (b != null && isFiniteBox(b)) return { ...b }
+  return null
+}
+
+/** Expand view framing when diagnostics need the largest-cluster hull as well as robust envelope. */
+export function contentBoundsHintFromGeometryOverlays(
+  drawingClusterDiagnosticsOverlay?: DrawingClusterDiagnosticsSvgOverlay | null,
+  robustPlanExtentOverlay?: RobustPlanExtentSvgOverlay | null
+): PlanBoundingBox | null {
+  let u: PlanBoundingBox | null = null
+  if (drawingClusterDiagnosticsOverlay != null) {
+    if (isFiniteBox(drawingClusterDiagnosticsOverlay.robustEnvelope)) {
+      u = { ...drawingClusterDiagnosticsOverlay.robustEnvelope }
+    }
+    const lc = drawingClusterDiagnosticsOverlay.largestClusterBBox
+    if (lc != null && isFiniteBox(lc)) u = unionFiniteBoxes(u, lc)
+  }
+  if (robustPlanExtentOverlay != null) {
+    if (isFiniteBox(robustPlanExtentOverlay.robustEnvelope)) {
+      u = unionFiniteBoxes(u, { ...robustPlanExtentOverlay.robustEnvelope })
+    }
+    if (isFiniteBox(robustPlanExtentOverlay.rawCleanedEnvelope)) {
+      u = unionFiniteBoxes(u, { ...robustPlanExtentOverlay.rawCleanedEnvelope })
+    }
+  }
+  return u
+}
+
 const FALLBACK_PAGE: PlanBoundingBox = { minX: 0, minY: 0, maxX: 612, maxY: 792 }
 
 export function computeMainStructuralWallSvgContentBounds(input: {
@@ -135,10 +201,19 @@ export function computeMainStructuralWallSvgContentBounds(input: {
   cleanedSegments: ExtractedLineSegment[]
   mainStructuralSplitSegments: ExtractedLineSegment[]
   texts: ExtractedTextRun[]
+  /**
+   * When set, this box is used instead of the union of all `cleanedSegments` for view framing
+   * (keeps massive outlier strokes from expanding the viewBox).
+   */
+  cleanedBoundsOverride?: PlanBoundingBox | null
 }): { bounds: PlanBoundingBox; degenerateContentUsedPageFallback: boolean } {
-  const { pageBounds, cleanedSegments, mainStructuralSplitSegments, texts } = input
+  const { pageBounds, cleanedSegments, mainStructuralSplitSegments, texts, cleanedBoundsOverride } = input
   let u = { ...pageBounds }
-  u = unionBoxes(u, unionSegmentBbox(cleanedSegments))
+  const cleanedBbox =
+    cleanedBoundsOverride != null && isFiniteBox(cleanedBoundsOverride)
+      ? cleanedBoundsOverride
+      : unionSegmentBbox(cleanedSegments)
+  u = unionBoxes(u, cleanedBbox)
   u = unionBoxes(u, unionSegmentBbox(mainStructuralSplitSegments))
   u = unionBoxes(u, boundsFromTexts(texts))
 
@@ -186,9 +261,13 @@ function lineEl(
   x2: number,
   y2: number,
   stroke: string,
-  strokeWidth: number
+  strokeWidth: number,
+  dash?: string,
+  opacity = 1
 ): string {
-  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`
+  const dashAttr = dash != null ? ` stroke-dasharray="${dash}"` : ""
+  const opAttr = opacity < 1 ? ` opacity="${opacity}"` : ""
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" vector-effect="non-scaling-stroke"${dashAttr}${opAttr}/>`
 }
 
 function rectStrokeEl(
@@ -198,10 +277,12 @@ function rectStrokeEl(
   h: number,
   stroke: string,
   strokeWidth: number,
-  dash?: string
+  dash?: string,
+  opacity = 1
 ): string {
   const dashAttr = dash != null ? ` stroke-dasharray="${dash}"` : ""
-  return `<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" vector-effect="non-scaling-stroke"${dashAttr}/>`
+  const opAttr = opacity < 1 ? ` opacity="${opacity}"` : ""
+  return `<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" vector-effect="non-scaling-stroke"${dashAttr}${opAttr}/>`
 }
 
 function rectFillEl(minX: number, minY: number, w: number, h: number, fill: string): string {
@@ -249,6 +330,15 @@ export interface MainStructuralWallSvgDebugInput {
   wallGraphOpts?: WallGraphFoundationOptions
   /** Shown in SVG <title> only. */
   sourceLabel?: string
+  /**
+   * Full extended structural set after junction split (strict ∪ rescues).
+   * Strokes that are **not** geometrically matched to `mainStructuralSplitSegments` render as extended-only (teal dash).
+   */
+  extendedStructuralSplitSegments?: ExtractedLineSegment[]
+  /** Optional overlay: raw vs robust plan extent and faint outlier strokes (debug). */
+  robustPlanExtentOverlay?: RobustPlanExtentSvgOverlay
+  /** Optional overlay: largest cluster vs robust core/envelope; long excluded strokes highlighted. */
+  drawingClusterDiagnosticsOverlay?: DrawingClusterDiagnosticsSvgOverlay
 }
 
 export interface MainStructuralWallSvgWriteOptions extends MainStructuralWallSvgDebugInput {
@@ -263,6 +353,15 @@ export interface MainStructuralWallSvgWriteOptions extends MainStructuralWallSvg
 /**
  * Full layered debug SVG (string + numeric debug metadata).
  */
+export function extendedOnlySplitSegments(
+  extendedSplit: ExtractedLineSegment[] | undefined,
+  strictSplit: ExtractedLineSegment[],
+  eps = 0.85
+): ExtractedLineSegment[] {
+  if (extendedSplit == null || extendedSplit.length === 0) return []
+  return extendedSplit.filter((s) => !strictSplit.some((t) => segmentsNearlyEqual(s, t, eps)))
+}
+
 export function buildMainStructuralWallSelectionSvgString(input: MainStructuralWallSvgDebugInput): MainStructuralWallSvgBuildResult {
   const {
     cleanedSegments,
@@ -271,13 +370,28 @@ export function buildMainStructuralWallSelectionSvgString(input: MainStructuralW
     pageBounds,
     wallGraphOpts,
     sourceLabel,
+    extendedStructuralSplitSegments,
+    robustPlanExtentOverlay,
+    drawingClusterDiagnosticsOverlay,
   } = input
+
+  const extendedOnly = extendedOnlySplitSegments(extendedStructuralSplitSegments, mainStructuralSplitSegments)
+
+  const outlierSet = robustPlanExtentOverlay
+    ? new Set<number>(robustPlanExtentOverlay.outlierIndices)
+    : null
+
+  const cleanedBoundsOverride = contentBoundsHintFromGeometryOverlays(
+    drawingClusterDiagnosticsOverlay ?? null,
+    robustPlanExtentOverlay ?? null
+  )
 
   const { bounds: cb, degenerateContentUsedPageFallback } = computeMainStructuralWallSvgContentBounds({
     pageBounds,
     cleanedSegments,
     mainStructuralSplitSegments,
     texts,
+    cleanedBoundsOverride,
   })
 
   const vbW = cb.maxX - cb.minX
@@ -327,8 +441,117 @@ export function buildMainStructuralWallSelectionSvgString(input: MainStructuralW
     )
   }
 
-  for (const s of cleanedSegments) {
-    parts.push(lineEl(s.x1, s.y1, s.x2, s.y2, COLOR_CLEANED, SW_CLEANED))
+  if (robustPlanExtentOverlay) {
+    const raw = robustPlanExtentOverlay.rawCleanedEnvelope
+    const rb = robustPlanExtentOverlay.robustEnvelope
+    if (isFiniteBox(raw)) {
+      parts.push(
+        rectStrokeEl(
+          raw.minX,
+          raw.minY,
+          raw.maxX - raw.minX,
+          raw.maxY - raw.minY,
+          COLOR_RAW_CLEANED_BBOX,
+          SW_ROBUST_OVERLAY,
+          "14 6",
+          0.55
+        )
+      )
+    }
+    if (isFiniteBox(rb)) {
+      parts.push(
+        rectStrokeEl(
+          rb.minX,
+          rb.minY,
+          rb.maxX - rb.minX,
+          rb.maxY - rb.minY,
+          COLOR_ROBUST_ENVELOPE,
+          SW_ROBUST_OVERLAY + 0.35,
+          "6 4",
+          0.85
+        )
+      )
+    }
+  }
+
+  if (drawingClusterDiagnosticsOverlay) {
+    const d = drawingClusterDiagnosticsOverlay
+    const lc = d.largestClusterBBox
+    if (lc != null && isFiniteBox(lc)) {
+      parts.push(
+        rectStrokeEl(
+          lc.minX,
+          lc.minY,
+          lc.maxX - lc.minX,
+          lc.maxY - lc.minY,
+          COLOR_DIAG_LARGEST_CLUSTER,
+          SW_DIAG_RECT,
+          "12 5",
+          0.9
+        )
+      )
+    }
+    if (isFiniteBox(d.robustCoreBBox)) {
+      parts.push(
+        rectStrokeEl(
+          d.robustCoreBBox.minX,
+          d.robustCoreBBox.minY,
+          d.robustCoreBBox.maxX - d.robustCoreBBox.minX,
+          d.robustCoreBBox.maxY - d.robustCoreBBox.minY,
+          COLOR_DIAG_ROBUST_CORE,
+          SW_DIAG_RECT - 0.2,
+          "5 4",
+          0.95
+        )
+      )
+    }
+    if (isFiniteBox(d.robustEnvelope)) {
+      parts.push(
+        rectStrokeEl(
+          d.robustEnvelope.minX,
+          d.robustEnvelope.minY,
+          d.robustEnvelope.maxX - d.robustEnvelope.minX,
+          d.robustEnvelope.maxY - d.robustEnvelope.minY,
+          COLOR_DIAG_ENVELOPE_GUIDE,
+          SW_DIAG_RECT + 0.15,
+          "2 3",
+          0.55
+        )
+      )
+    }
+  }
+
+  if (drawingClusterDiagnosticsOverlay) {
+    const d = drawingClusterDiagnosticsOverlay
+    const core = new Set(d.coreSegmentIndices)
+    const longEx = new Set(d.excludedLongHighlightIndices)
+    for (let ci = 0; ci < cleanedSegments.length; ci++) {
+      const s = cleanedSegments[ci]!
+      if (core.has(ci)) {
+        parts.push(lineEl(s.x1, s.y1, s.x2, s.y2, COLOR_CLEANED, SW_CLEANED))
+      } else if (longEx.has(ci)) {
+        parts.push(lineEl(s.x1, s.y1, s.x2, s.y2, COLOR_DIAG_EXCLUDED_LONG, SW_DIAG_LONG, undefined, 0.95))
+      } else {
+        parts.push(lineEl(s.x1, s.y1, s.x2, s.y2, COLOR_DIAG_EXCLUDED_OTHER, SW_DIAG_OTHER, "4 3", 0.38))
+      }
+    }
+  } else {
+    for (let ci = 0; ci < cleanedSegments.length; ci++) {
+      if (outlierSet?.has(ci)) continue
+      const s = cleanedSegments[ci]!
+      parts.push(lineEl(s.x1, s.y1, s.x2, s.y2, COLOR_CLEANED, SW_CLEANED))
+    }
+    if (outlierSet) {
+      for (const ci of robustPlanExtentOverlay!.outlierIndices) {
+        const s = cleanedSegments[ci]
+        if (!s) continue
+        parts.push(lineEl(s.x1, s.y1, s.x2, s.y2, COLOR_OUTLIER_STROKE, SW_OUTLIER, "4 3", 0.42))
+      }
+    }
+  }
+
+  for (const s of extendedOnly) {
+    parts.push(lineEl(s.x1, s.y1, s.x2, s.y2, COLOR_EXTENDED_ONLY, SW_EXTENDED_ONLY, "9 5"))
   }
 
   for (let i = 0; i < mainStructuralSplitSegments.length; i++) {
@@ -361,13 +584,30 @@ export function buildMainStructuralWallSelectionSvgString(input: MainStructuralW
  * Minimal SVG: page bounds + selected main walls only (same viewBox / transform as full debug).
  */
 export function buildMinimalMainStructuralWallSvgString(input: MainStructuralWallSvgDebugInput): MainStructuralWallSvgBuildResult {
-  const { mainStructuralSplitSegments, texts, pageBounds, cleanedSegments, sourceLabel } = input
+  const {
+    mainStructuralSplitSegments,
+    texts,
+    pageBounds,
+    cleanedSegments,
+    sourceLabel,
+    extendedStructuralSplitSegments,
+    robustPlanExtentOverlay,
+    drawingClusterDiagnosticsOverlay,
+  } = input
+
+  const extendedOnly = extendedOnlySplitSegments(extendedStructuralSplitSegments, mainStructuralSplitSegments)
+
+  const cleanedBoundsOverride = contentBoundsHintFromGeometryOverlays(
+    drawingClusterDiagnosticsOverlay ?? null,
+    robustPlanExtentOverlay ?? null
+  )
 
   const { bounds: cb, degenerateContentUsedPageFallback } = computeMainStructuralWallSvgContentBounds({
     pageBounds,
     cleanedSegments,
     mainStructuralSplitSegments,
     texts,
+    cleanedBoundsOverride,
   })
 
   const vbW = cb.maxX - cb.minX
@@ -397,6 +637,87 @@ export function buildMinimalMainStructuralWallSvgString(input: MainStructuralWal
       "10 6"
     )
   )
+  if (robustPlanExtentOverlay) {
+    const raw = robustPlanExtentOverlay.rawCleanedEnvelope
+    const rb = robustPlanExtentOverlay.robustEnvelope
+    if (isFiniteBox(raw)) {
+      parts.push(
+        rectStrokeEl(
+          raw.minX,
+          raw.minY,
+          raw.maxX - raw.minX,
+          raw.maxY - raw.minY,
+          COLOR_RAW_CLEANED_BBOX,
+          SW_ROBUST_OVERLAY,
+          "14 6",
+          0.55
+        )
+      )
+    }
+    if (isFiniteBox(rb)) {
+      parts.push(
+        rectStrokeEl(
+          rb.minX,
+          rb.minY,
+          rb.maxX - rb.minX,
+          rb.maxY - rb.minY,
+          COLOR_ROBUST_ENVELOPE,
+          SW_ROBUST_OVERLAY + 0.35,
+          "6 4",
+          0.85
+        )
+      )
+    }
+  }
+  if (drawingClusterDiagnosticsOverlay) {
+    const d = drawingClusterDiagnosticsOverlay
+    const lc = d.largestClusterBBox
+    if (lc != null && isFiniteBox(lc)) {
+      parts.push(
+        rectStrokeEl(
+          lc.minX,
+          lc.minY,
+          lc.maxX - lc.minX,
+          lc.maxY - lc.minY,
+          COLOR_DIAG_LARGEST_CLUSTER,
+          SW_DIAG_RECT,
+          "12 5",
+          0.9
+        )
+      )
+    }
+    if (isFiniteBox(d.robustCoreBBox)) {
+      parts.push(
+        rectStrokeEl(
+          d.robustCoreBBox.minX,
+          d.robustCoreBBox.minY,
+          d.robustCoreBBox.maxX - d.robustCoreBBox.minX,
+          d.robustCoreBBox.maxY - d.robustCoreBBox.minY,
+          COLOR_DIAG_ROBUST_CORE,
+          SW_DIAG_RECT - 0.2,
+          "5 4",
+          0.95
+        )
+      )
+    }
+    if (isFiniteBox(d.robustEnvelope)) {
+      parts.push(
+        rectStrokeEl(
+          d.robustEnvelope.minX,
+          d.robustEnvelope.minY,
+          d.robustEnvelope.maxX - d.robustEnvelope.minX,
+          d.robustEnvelope.maxY - d.robustEnvelope.minY,
+          COLOR_DIAG_ENVELOPE_GUIDE,
+          SW_DIAG_RECT + 0.15,
+          "2 3",
+          0.55
+        )
+      )
+    }
+  }
+  for (const s of extendedOnly) {
+    parts.push(lineEl(s.x1, s.y1, s.x2, s.y2, COLOR_EXTENDED_ONLY, SW_EXTENDED_ONLY, "9 5"))
+  }
   for (const s of mainStructuralSplitSegments) {
     parts.push(lineEl(s.x1, s.y1, s.x2, s.y2, COLOR_SELECTED_DIM, SW_SELECTED_DIM + 0.5))
   }

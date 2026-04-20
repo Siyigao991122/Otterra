@@ -88,6 +88,7 @@ function designPlacementToFurniture(
     position: [p.position.x, dims.height / 2, p.position.z],
     rotation: p.rotation_y_deg,
     model_url: prod?.model_url ?? undefined,
+    dimensionsAuthoritative: !!hasDims,
   }
 }
 
@@ -124,6 +125,7 @@ function layoutPlacementToFurniture(
     position: [p.x, dims.height / 2, p.z],
     rotation: p.rotation_y_deg,
     model_url: prod?.model_url ?? undefined,
+    dimensionsAuthoritative: !!hasDims,
   }
 }
 
@@ -177,6 +179,11 @@ function RoomPageContent() {
       depth: d,
       height: h,
       ...(dimsMatchStored && stored.geometry ? { geometry: stored.geometry } : {}),
+      ...(dimsMatchStored && stored.geometryEnvelopeSource
+        ? { geometryEnvelopeSource: stored.geometryEnvelopeSource }
+        : !dimsMatchStored
+          ? { geometryEnvelopeSource: "manual-url" as const }
+          : {}),
     }
     setRoomDimensions((prev) =>
       prev.width === next.width &&

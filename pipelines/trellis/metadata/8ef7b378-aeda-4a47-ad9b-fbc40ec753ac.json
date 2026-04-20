@@ -1,0 +1,12 @@
+{
+  "product_id": "8ef7b378-aeda-4a47-ad9b-fbc40ec753ac",
+  "title": "UPPLAND",
+  "product_url": "https://www.ikea.com/us/en/p/uppland-sofa-blekinge-white-80510249/",
+  "target_dims_m": {
+    "width": 2.18,
+    "height": 0.9,
+    "depth": 0.88
+  },
+  "model_url": "/models/8ef7b378-aeda-4a47-ad9b-fbc40ec753ac.glb",
+  "scaling_note": "Runtime: FurnitureModel scales GLB by bounding box to fit (width, height, depth). DB mapping: width_m→X, length_m→Z, height_m→Y. See lib/dimensionSemantics.ts."
+}
