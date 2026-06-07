@@ -3,6 +3,7 @@
  */
 
 import type {
+  FloorplanDoorOpening,
   FloorplanGeometry,
   FloorplanPoint2D,
   FloorplanWallSegment,
@@ -53,6 +54,61 @@ export function centerPolygonAtOrigin(pts: FloorplanPoint2D[]): FloorplanPoint2D
   return pts.map((p) => ({ x: p.x - cx, y: p.y - cy }))
 }
 
+export function scaleFloorplanGeometry(
+  geometry: FloorplanGeometry,
+  scaleX: number,
+  scaleY: number
+): FloorplanGeometry {
+  const safeScaleX = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1
+  const safeScaleY = Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1
+
+  const scalePoint = (p: FloorplanPoint2D): FloorplanPoint2D => ({
+    x: p.x * safeScaleX,
+    y: p.y * safeScaleY,
+  })
+
+  return {
+    ...geometry,
+    footprintPolygon: geometry.footprintPolygon.map(scalePoint),
+    interiorWalls: geometry.interiorWalls?.map((wall) => ({
+      ...wall,
+      x1: wall.x1 * safeScaleX,
+      y1: wall.y1 * safeScaleY,
+      x2: wall.x2 * safeScaleX,
+      y2: wall.y2 * safeScaleY,
+      thickness:
+        wall.thickness != null
+          ? wall.thickness * ((safeScaleX + safeScaleY) / 2)
+          : wall.thickness,
+    })),
+    doorOpenings: geometry.doorOpenings?.map((door) => ({
+      ...door,
+      x1: door.x1 * safeScaleX,
+      y1: door.y1 * safeScaleY,
+      x2: door.x2 * safeScaleX,
+      y2: door.y2 * safeScaleY,
+      height:
+        door.height != null
+          ? door.height * ((safeScaleX + safeScaleY) / 2)
+          : door.height,
+    })),
+    rooms: geometry.rooms?.map((room) => ({
+      ...room,
+      polygon: room.polygon.map(scalePoint),
+    })),
+    dimensions: geometry.dimensions?.map((dimension) => ({
+      ...dimension,
+      value: dimension.value * ((safeScaleX + safeScaleY) / 2),
+      p1: scalePoint(dimension.p1),
+      p2: scalePoint(dimension.p2),
+    })),
+    scale:
+      typeof geometry.scale === "number"
+        ? geometry.scale * ((safeScaleX + safeScaleY) / 2)
+        : geometry.scale,
+  }
+}
+
 export function rectangleFootprintFromAABB(width: number, depth: number): FloorplanPoint2D[] {
   const hw = width / 2
   const hd = depth / 2
@@ -83,6 +139,9 @@ const INTERIOR_WALL_MIN_LENGTH_M = 0.08
 const INTERIOR_WALL_DEFAULT_THICKNESS_M = 0.12
 const INTERIOR_WALL_MIN_THICKNESS_M = 0.06
 const INTERIOR_WALL_MAX_THICKNESS_M = 0.45
+const DOOR_OPENING_MIN_WIDTH_M = 0.45
+const DOOR_OPENING_DEFAULT_HEIGHT_M = 2.05
+const DOOR_OPENING_MAX_HEIGHT_M = 3
 
 function emptyInteriorWallStats(): InteriorWallSanitizeStats {
   return {
@@ -159,6 +218,56 @@ function processInteriorWalls(
   return { walls: out, stats }
 }
 
+function processDoorOpenings(
+  raw: unknown,
+  cx: number,
+  cy: number,
+  footprintSpan: number
+): FloorplanDoorOpening[] {
+  if (!Array.isArray(raw)) return []
+
+  const maxLen = Math.min(Math.max(footprintSpan * 0.9, 5), 12)
+  const out: FloorplanDoorOpening[] = []
+
+  for (let i = 0; i < raw.length; i++) {
+    const door = raw[i]
+    if (!door || typeof door !== "object") continue
+    const o = door as Record<string, unknown>
+    const x1 = Number(o.x1)
+    const y1 = Number(o.y1)
+    const x2 = Number(o.x2)
+    const y2 = Number(o.y2)
+    if (![x1, y1, x2, y2].every(Number.isFinite)) continue
+
+    const width = Math.hypot(x2 - x1, y2 - y1)
+    if (width < DOOR_OPENING_MIN_WIDTH_M || width > maxLen) continue
+
+    let height =
+      o.height != null && Number.isFinite(Number(o.height))
+        ? Number(o.height)
+        : DOOR_OPENING_DEFAULT_HEIGHT_M
+    height = Math.min(DOOR_OPENING_MAX_HEIGHT_M, Math.max(1.8, height))
+
+    const kindRaw = typeof o.kind === "string" ? o.kind.toLowerCase() : "unknown"
+    const kind: FloorplanDoorOpening["kind"] =
+      kindRaw === "swing" || kindRaw === "sliding" || kindRaw === "opening"
+        ? kindRaw
+        : "unknown"
+
+    out.push({
+      id: typeof o.id === "string" ? o.id : `door-${i}`,
+      x1: x1 - cx,
+      y1: y1 - cy,
+      x2: x2 - cx,
+      y2: y2 - cy,
+      height,
+      kind,
+    })
+  }
+
+  return out
+}
+
 /** When footprint sanitize fails: still count what the model sent for walls (debug only). */
 function interiorWallRawOnlyStats(raw: unknown): InteriorWallSanitizeStats {
   const stats = emptyInteriorWallStats()
@@ -185,6 +294,7 @@ export function sanitizeFloorplanGeometryWithStats(raw: unknown): {
 } {
   const obj = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null
   const wallsField = obj?.interiorWallsMeters ?? obj?.interiorWalls
+  const doorField = obj?.doorOpeningsMeters ?? obj?.doorOpenings ?? obj?.doorsMeters ?? obj?.doors
 
   if (!obj) {
     return { geometry: undefined, interiorWallStats: emptyInteriorWallStats() }
@@ -215,16 +325,17 @@ export function sanitizeFloorplanGeometryWithStats(raw: unknown): {
   const span = Math.max(maxX - minX, maxY - minY, 1)
 
   const { walls: interiorWalls, stats: interiorWallStats } = processInteriorWalls(wallsField, cx, cy, span)
+  const doorOpenings = processDoorOpenings(doorField, cx, cy, span)
 
   const geometry: FloorplanGeometry = {
     units: "m",
     footprintPolygon,
     interiorWalls: interiorWalls.length ? interiorWalls : undefined,
+    doorOpenings: doorOpenings.length ? doorOpenings : undefined,
     confidence: typeof obj.confidence === "number" ? obj.confidence : undefined,
   }
 
   // TODO: map dimension callout lines to wall segments when CAD OCR improves
-  // TODO: doors / openings as edge gaps
   return { geometry, interiorWallStats }
 }
 

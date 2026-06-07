@@ -6,7 +6,8 @@ export type Placement = {
   qty?: number
 }
 
-const KEY = "room_layout_v1"
+/** v2: world Z aligns with −plan Y (polygon shell / plan view ↔ upload footprint preview). */
+const KEY = "room_layout_v2"
 
 function safeParse(): Placement[] {
   if (typeof window === "undefined") return []

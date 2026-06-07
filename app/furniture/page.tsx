@@ -9,11 +9,13 @@ import { ArrowLeft, ListPlus, Plus } from "lucide-react"
 import { addToSelected } from "@/lib/selectedFurniture"
 import { upsertPlacement } from "@/lib/roomLayout"
 import type { ProductModelLifecycle } from "@/lib/productModelLifecycle"
+import { readRoomDimensionsFromSession } from "@/lib/roomDimensionsSession"
 
 const CATEGORIES = [
   { value: "sofa", label: "Sofa" },
   { value: "bed", label: "Bed" },
   { value: "dining_table", label: "Dining Table" },
+  { value: "chair", label: "Chair" },
 ] as const
 
 interface Product extends ProductModelLifecycle {
@@ -37,6 +39,8 @@ export default function FurniturePage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
+  const [roomHref, setRoomHref] = useState("/room")
 
   useEffect(() => {
     setLoading(true)
@@ -53,7 +57,19 @@ export default function FurniturePage() {
       .finally(() => setLoading(false))
   }, [category])
 
-  const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    const stored = readRoomDimensionsFromSession()
+    if (!stored) return
+  
+    const params = new URLSearchParams({
+      width: String(stored.width),
+      depth: String(stored.depth),
+      height: String(stored.height),
+    })
+  
+    setRoomHref(`/room?${params.toString()}`)
+  }, [])
+
 
   const handleAddToList = (p: Product) => {
     addToSelected({
@@ -116,7 +132,7 @@ export default function FurniturePage() {
             Back
           </Link>
           <div className="flex gap-4">
-            <Link href="/room" className="text-sm text-primary hover:underline">
+            <Link href={roomHref} className="text-sm text-primary hover:underline">
               Room
             </Link>
             <Link href="/plan" className="text-sm text-primary hover:underline">

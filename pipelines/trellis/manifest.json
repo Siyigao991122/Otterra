@@ -1,0 +1,50 @@
+{
+  "version": "1",
+  "products": [
+    {
+      "id": "325e9836-68f9-469c-8ed1-c7e9ce9e7555",
+      "title": "GLOSTAD",
+      "product_url": "https://www.ikea.com/us/en/p/glostad-sofa-dark-gray-20482924/",
+      "width_m": 1.711,
+      "length_m": 0.781,
+      "height_m": 0.679,
+      "images": ["front.jpg", "side.jpg", "angle.jpg"]
+    },
+    {
+      "id": "8ef7b378-aeda-4a47-ad9b-fbc40ec753ac",
+      "title": "UPPLAND",
+      "product_url": "https://www.ikea.com/us/en/p/uppland-sofa-blekinge-white-80510249/",
+      "width_m": 2.18,
+      "length_m": 0.88,
+      "height_m": 0.9,
+      "images": ["front.jpg", "side.jpg", "angle.jpg"]
+    },
+    {
+      "id": "malm-bed",
+      "title": "MALM Bed",
+      "product_url": "https://www.ikea.com/us/en/p/malm-bed-frame-high-white-luroey-00247950/",
+      "width_m": 1.5,
+      "length_m": 2.0,
+      "height_m": 0.42,
+      "images": ["front.jpg", "side.jpg"]
+    },
+    {
+      "id": "ekedalen-table",
+      "title": "EKEDALEN Dining Table",
+      "product_url": "https://www.ikea.com/us/en/p/ekedalen-extendable-table-oak-70268865/",
+      "width_m": 0.9,
+      "length_m": 1.2,
+      "height_m": 0.74,
+      "images": ["top.jpg", "angle.jpg"]
+    },
+    {
+      "id": "friheten-klagshamn",
+      "title": "FRIHETEN / KLAGSHAMN",
+      "product_url": "https://www.ikea.com/us/en/p/friheten-klagshamn-sleeper-sectional-3-seat-w-storage-faringe-light-gray-s49520240/",
+      "width_m": 2.299,
+      "length_m": 1.511,
+      "height_m": 0.86,
+      "images": ["front.jpg", "side.jpg", "angle.jpg"]
+    }
+  ]
+}

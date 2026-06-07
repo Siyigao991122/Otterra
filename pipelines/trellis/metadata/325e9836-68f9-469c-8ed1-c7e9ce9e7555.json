@@ -1,0 +1,12 @@
+{
+  "product_id": "325e9836-68f9-469c-8ed1-c7e9ce9e7555",
+  "title": "GLOSTAD",
+  "product_url": "https://www.ikea.com/us/en/p/glostad-sofa-dark-gray-20482924/",
+  "target_dims_m": {
+    "width": 1.711,
+    "height": 0.679,
+    "depth": 0.781
+  },
+  "model_url": "/models/325e9836-68f9-469c-8ed1-c7e9ce9e7555.glb",
+  "scaling_note": "Runtime: FurnitureModel scales GLB by bounding box to fit (width, height, depth). DB mapping: width_m→X, length_m→Z, height_m→Y. See lib/dimensionSemantics.ts."
+}

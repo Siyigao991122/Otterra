@@ -1,0 +1,1368 @@
+{
+  "pageProps": {
+    "config": {
+      "apiCountry": "us",
+      "apiLanguage": "en",
+      "assemblyServiceApiClientId": "4d5d8c53-c2e7-4e3d-b791-a21eecc49ddc",
+      "assemblyServiceBaseUrl": "https://api.serviceoffers.ingka.com/public/graphql",
+      "ciaApiBaseUrl": "https://api.salesitem.ingka.com",
+      "ciaApiClientKey": "ef382663-a2a5-40d4-8afe-f0634821c0ed",
+      "cmaApiBaseUrl": "https://cma.ingka.com/cma",
+      "cmaApiClientKey": "GnJEuqjAnY3vEeZQvaoCudpJewgGq00D",
+      "contactUsUrl": "https://www.ikea.com/us/en/customer-service/contact-us/",
+      "country": "us",
+      "dateFormat": {
+        "customDateFormat": "mmm d, yyyy",
+        "customStockCheckDateFormat": "mm/dd/yyyy",
+        "customStockCheckTimeFormat": "h:MM tt",
+        "customTimeFormat": "h:MM tt",
+        "translations": {
+          "dayNames": [
+            "Sun",
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri",
+            "Sat",
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday"
+          ],
+          "monthNames": [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December"
+          ],
+          "timeNames": [
+            "a",
+            "p",
+            "am",
+            "pm",
+            "A",
+            "P",
+            "AM",
+            "PM"
+          ]
+        }
+      },
+      "decimalSeparator": ".",
+      "disableECommerce": false,
+      "disableStockCheckSection": false,
+      "enableAsIsOnline": true,
+      "enableAssemblyServicePrice": true,
+      "enableClickAndCollectPrice": false,
+      "enableDeliveryPrice": false,
+      "enableDeliveryTime": false,
+      "enableFinancialServiceFragment": true,
+      "enableFoodAvailability": true,
+      "enableImperialDistance": true,
+      "enableMovInformation": true,
+      "enableMoreWaysToPay": true,
+      "enableProductCardApi": false,
+      "enableQuestionsAndAnswers": true,
+      "enableRegionalAvailability": true,
+      "enableRemovalService": false,
+      "enableSchemaRegionalAvailabilityOnServer": true,
+      "enableZipIn": true,
+      "favouritesClientId": "46673edd-4370-40db-a2cd-c307e6055029",
+      "homeSmartPolicyUrl": "",
+      "locale": "en-US",
+      "priceFormat": {
+        "currencyPrefix": "$",
+        "currencySuffix": "",
+        "priceFormatter": "0[,]0[.]!00"
+      },
+      "privacyPolicyUrl": "https://www.ikea.com/us/en/customer-service/privacy-policy/",
+      "shortDateFormat": "mmm d, yyyy",
+      "siteBaseUrl": "https://www.ikea.com",
+      "siteFolder": "us/en",
+      "stockNotificationApiBaseUrl": "https://api.salesitem.ingka.com/notifications/signup",
+      "useSentry": true,
+      "useSuggestedStoresResource": false,
+      "textDirection": "ltr"
+    },
+    "product": {
+      "currencyCode": "USD",
+      "description": "Sofa with chaise, Knisa dark gray",
+      "isCustomMade": false,
+      "isFood": false,
+      "isServerOnlineSellable": true,
+      "itemMeasureReferenceText": "",
+      "itemNo": "69578602",
+      "mediaList": [
+        {
+          "type": "image",
+          "content": {
+            "alt": "Modern dark grey GLOSTAD sofa with matching footrest. Clean lines, padded cushions, and metal legs.",
+            "height": 2000,
+            "id": "1234952_PE917265",
+            "imageFileName": "1234952_PE917265_S5.JPG",
+            "orientation": "square",
+            "type": "MAIN_PRODUCT_IMAGE",
+            "url": "https://www.ikea.com/us/en/images/products/glostad-sofa-with-chaise-knisa-dark-gray__1234952_pe917265_s5.jpg",
+            "width": 2000
+          }
+        },
+        {
+          "type": "image",
+          "content": {
+            "alt": "Modern living room with grey GLOSTAD sofa, cushions, throw, glass coffee table, wall prints, and floor lamp.",
+            "height": 2000,
+            "id": "1235200_PE917305",
+            "imageFileName": "1235200_PE917305_S5.JPG",
+            "orientation": "square",
+            "type": "CONTEXT_PRODUCT_IMAGE",
+            "url": "https://www.ikea.com/us/en/images/products/glostad-sofa-with-chaise-knisa-dark-gray__1235200_pe917305_s5.jpg",
+            "width": 2000
+          }
+        },
+        {
+          "type": "image",
+          "content": {
+            "alt": "Modern minimalist dark grey GLOSTAD sofa, small & cosy, near large window.",
+            "height": 2000,
+            "id": "1235176_PE917297",
+            "imageFileName": "1235176_PE917297_S5.JPG",
+            "orientation": "square",
+            "type": "CONTEXT_PRODUCT_IMAGE",
+            "url": "https://www.ikea.com/us/en/images/products/glostad-sofa-with-chaise-knisa-dark-gray__1235176_pe917297_s5.jpg",
+            "width": 2000
+          }
+        },
+        {
+          "type": "image",
+          "content": {
+            "alt": "Illustration with measurements for the product: GLOSTAD.",
+            "height": 2000,
+            "id": "1387199_PE964151",
+            "imageFileName": "1387199_PE964151_S5.JPG",
+            "orientation": "square",
+            "type": "MEASUREMENT_ILLUSTRATION",
+            "url": "https://www.ikea.com/us/en/images/products/glostad-sofa-with-chaise-knisa-dark-gray__1387199_pe964151_s5.jpg",
+            "width": 2000
+          }
+        },
+        {
+          "type": "image",
+          "content": {
+            "alt": "Illustration with measurements for the product: GLOSTAD.",
+            "height": 2000,
+            "id": "1387091_PE964080",
+            "imageFileName": "1387091_PE964080_S5.JPG",
+            "orientation": "square",
+            "type": "MEASUREMENT_ILLUSTRATION",
+            "url": "https://www.ikea.com/us/en/images/products/glostad-sofa-with-chaise-knisa-dark-gray__1387091_pe964080_s5.jpg",
+            "width": 2000
+          }
+        }
+      ],
+      "name": "GLOSTAD",
+      "prefixedProductId": "S69578602",
+      "price": 249,
+      "showAsNonSellableProduct": false,
+      "type": "SPR",
+      "visibleItemNo": "695.786.02",
+      "ratingProps": {
+        "rating": 3.7,
+        "label": "(24)",
+        "ariaLabel": "Review: 3.7 out of 5 stars. Total reviews: 24"
+      },
+      "reviewCount": 24,
+      "secondaryRatings": [
+        {
+          "id": "appearance",
+          "label": "Appearance",
+          "value": 3.6
+        },
+        {
+          "id": "ease_of_assembly",
+          "label": "Ease of assembly/installation",
+          "value": 3.4
+        },
+        {
+          "id": "product_quality",
+          "label": "Product quality",
+          "value": 3.8
+        },
+        {
+          "id": "value_for_money",
+          "label": "Value for money",
+          "value": 4.3
+        },
+        {
+          "id": "works_as_expected",
+          "label": "Works as expected",
+          "value": 4
+        }
+      ],
+      "guarantee": {
+        "description": "Rest easy with our guarantee - bringing you years of worry-free living at home with lasting quality and dependable performance.",
+        "guarantees": [
+          "10"
+        ],
+        "text": "10 year limited warranty"
+      },
+      "packaging": {
+        "numberOfPackages": 2,
+        "packages": [
+          {
+            "name": "GLOSTAD",
+            "typeName": "Sofa with chaise",
+            "itemNo": "69578602",
+            "articleNumber": {
+              "label": "Article Number",
+              "value": "695.786.02"
+            },
+            "measurements": [],
+            "quantity": {
+              "label": "Package(s)",
+              "value": 1
+            },
+            "multiPackDisclaimerText": "This product has multiple packages."
+          },
+          {
+            "name": "GLOSTAD",
+            "typeName": "Sofa",
+            "itemNo": "40595942",
+            "articleNumber": {
+              "label": "Article Number",
+              "value": "405.959.42"
+            },
+            "measurements": [
+              [
+                {
+                  "label": "Width",
+                  "type": "width",
+                  "text": "25 ½ \"",
+                  "value": 25.5
+                },
+                {
+                  "label": "Height",
+                  "type": "height",
+                  "text": "7 ½ \"",
+                  "value": 7.5
+                },
+                {
+                  "label": "Length",
+                  "type": "length",
+                  "text": "68 ¾ \"",
+                  "value": 68.75
+                },
+                {
+                  "label": "Weight",
+                  "type": "weight",
+                  "text": "57 lb 5 oz",
+                  "value": 57.312
+                }
+              ]
+            ],
+            "quantity": {
+              "label": "Package(s)",
+              "value": 1
+            },
+            "multiPackDisclaimerText": null
+          },
+          {
+            "name": "GLOSTAD",
+            "typeName": "Ottoman",
+            "itemNo": "60595936",
+            "articleNumber": {
+              "label": "Article Number",
+              "value": "605.959.36"
+            },
+            "measurements": [
+              [
+                {
+                  "label": "Width",
+                  "type": "width",
+                  "text": "23 ½ \"",
+                  "value": 23.5
+                },
+                {
+                  "label": "Height",
+                  "type": "height",
+                  "text": "7 ½ \"",
+                  "value": 7.5
+                },
+                {
+                  "label": "Length",
+                  "type": "length",
+                  "text": "27 ½ \"",
+                  "value": 27.5
+                },
+                {
+                  "label": "Weight",
+                  "type": "weight",
+                  "text": "18 lb 1 oz",
+                  "value": 18.062
+                }
+              ]
+            ],
+            "quantity": {
+              "label": "Package(s)",
+              "value": 1
+            },
+            "multiPackDisclaimerText": null
+          }
+        ],
+        "totalNoOfPackagesText": "This product comes as 2 packages.",
+        "maxMeasurements": {
+          "weightText": "57 lb 5 oz",
+          "widthText": "25 ½ \"",
+          "lengthText": "68 ¾ \"",
+          "heightText": "7 ½ \"",
+          "diameterText": ""
+        }
+      },
+      "rating": 3.7,
+      "subProducts": [
+        {
+          "itemNo": "40595942",
+          "itemType": "ART",
+          "name": "GLOSTAD",
+          "quantity": 1,
+          "typeName": "sofa",
+          "mainImage": {
+            "alt": "Dark grey GLOSTAD sofa with slim legs, plush cushions, modern minimalist design.",
+            "height": 2000,
+            "id": "1234948_PE917261",
+            "imageFileName": "1234948_PE917261_S5.JPG",
+            "orientation": "square",
+            "type": "MAIN_PRODUCT_IMAGE",
+            "url": "https://www.ikea.com/us/en/images/products/glostad-sofa-knisa-dark-gray__1234948_pe917261_s5.jpg",
+            "width": 2000
+          },
+          "pipUrl": "https://www.ikea.com/us/en/p/glostad-sofa-knisa-dark-gray-40595942/",
+          "itemMeasureReferenceText": ""
+        },
+        {
+          "itemNo": "60595936",
+          "itemType": "ART",
+          "name": "GLOSTAD",
+          "quantity": 1,
+          "typeName": "ottoman",
+          "mainImage": {
+            "alt": "GLOSTAD footstool: dark grey, fabric and metal, square, modern design.",
+            "height": 2000,
+            "id": "1234946_PE917259",
+            "imageFileName": "1234946_PE917259_S5.JPG",
+            "orientation": "square",
+            "type": "MAIN_PRODUCT_IMAGE",
+            "url": "https://www.ikea.com/us/en/images/products/glostad-ottoman-knisa-dark-gray__1234946_pe917259_s5.jpg",
+            "width": 2000
+          },
+          "pipUrl": "https://www.ikea.com/us/en/p/glostad-ottoman-knisa-dark-gray-60595936/",
+          "itemMeasureReferenceText": ""
+        }
+      ]
+    },
+    "translations": {
+      "A11Y_GALLERY_VIDEO_TRANSCRIPT_BUTTON": "Show transcript",
+      "AVAILABILITY_LOADING_PLACEHOLDER": "Checking availability...",
+      "CHANGE_STORE_BUTTON_LABEL": "Change store",
+      "CLICK_AND_COLLECT_AVAILABLE_BASIC": "Available",
+      "CLICK_AND_COLLECT_BASIC": "Click & collect",
+      "CLICK_AND_COLLECT_NOT_SOLD_BASIC": "Not sold here",
+      "CLICK_AND_COLLECT_UNAVAILABLE_BASIC": "Currently unavailable",
+      "COMMON_SEE_OPTIONS_AT_CHECKOUT": "Find all options at checkout",
+      "CUSTOM_MADE_ALTERNATIVE_OPTIONS_MODAL_MESSAGE": "Take the dimensions of the area in which you will use it. Then contact a co-worker who will help you make the right order by visiting an IKEA store, setting up an online meeting or by calling customer support.",
+      "CUSTOM_MADE_MODAL_BUTTON_LABEL": "Contact us",
+      "CUSTOM_MADE_MODAL_MESSAGE": "This product is custom made, because we manufacture it according to your size specifications.",
+      "CUSTOM_MADE_SECONDARY_TEXT": "This is a custom made product. Please contact us to make an order.",
+      "CUSTOM_MADE": "Contact a co-worker",
+      "DELIVERY_AVAILABLE_BASIC": "Available",
+      "DELIVERY_BASIC": "Delivery",
+      "DELIVERY_CHECK_AVAILABILITY_BASIC": "Check availability",
+      "DELIVERY_CURRENTLY_LIMITED_LARGE_ORDERS_BASIC": "Currently limited to large orders",
+      "DELIVERY_CURRENTLY_NOT_SOLD_BASIC": "Currently not sold",
+      "DELIVERY_CURRENTLY_UNAVAILABLE_BASIC": "Currently unavailable",
+      "DELIVERY_NO_INFO_BASIC": "Information currently unavailable",
+      "DELIVERY_NOT_POSSIBLE_BASIC": "Not offered",
+      "DELIVERY_NOT_SOLD_BASIC": "Not sold here",
+      "DELIVERY_PARTS_OF_SPR_BASIC": "{countInStock} of {countAll} parts available",
+      "DELIVERY": "Delivery to {zip}",
+      "FIND_ALL_OPTIONS_AT_CHECKOUT_SECONDARY_TEXT": "Find all options at checkout",
+      "FOOD_ITEMS": "Our food products can’t be bought online. Please visit our stores to check availability.",
+      "GALLERY_VIDEO_TRANSCRIPT_HIDE_BUTTON": "Hide transcript",
+      "GALLERY_VIDEO_TRANSCRIPT_TITLE": "Video transcript",
+      "KEY_FACTS_ARIA_LABEL": "Product features",
+      "MEDIA_GRID_DESCRIPTION": "{counter} {productName} images",
+      "MEDIA_GRID_SKIP_IMAGES": "Skip images",
+      "MOV_DELIVERY_DISCLAIMER": "Ships with {movThreshold} order",
+      "MOV_TERMSCONDITIONS_MODAL_CONTENT_1": "To qualify for delivery, your shopping bag must have a merchandise subtotal of {movThreshold} or more after discounts, credits or promotional offers. Gift card purchases, taxes, shipping and delivery fees, assembly or other service fees do not count towards {movThreshold} minimum.",
+      "MOV_TERMSCONDITIONS_MODAL_CONTENT_2": "Need a little more to qualify? Simply add more products or increase quantities in your bag. Or, if it's more convenient, you can skip the minimum altogether by choosing pick-up (where available).",
+      "MOV_TERMSCONDITIONS_MODAL_LINK": "Terms and Conditions",
+      "MOV_TERMSCONDITIONS_MODAL_TITLE": "{movThreshold} minimum purchase threshold​",
+      "PIP_A11Y_PRODUCT_GALLERY_IMAGE_COUNT": "Select product photo {thumbnailPosition} of {thumbnailCount}",
+      "PIP_A11Y_PRODUCT_GALLERY_IMAGE": "Select product photo",
+      "PIP_A11Y_PRODUCT_GALLERY_SHOW_3D": "Show 3D modal",
+      "PIP_A11Y_PRODUCT_GALLERY_SHOW_ALL_MEDIA": "Show all media, open modal.",
+      "PIP_A11Y_PRODUCT_GALLERY_SHOW_NEXT_IMAGE": "Show next image",
+      "PIP_A11Y_PRODUCT_GALLERY_SHOW_PREVIOUS_IMAGE": "Show previous image",
+      "PIP_A11Y_PRODUCT_GALLERY_VIDEO_COUNT": "Select product video {thumbnailVideoPosition} of {thumbnailVideoCount}",
+      "PIP_A11Y_PRODUCT_GALLERY_VIDEO": "Select product video",
+      "PIP_A11Y_STORE_LIST_CLEAR_SEARCH": "Clear input",
+      "PIP_A11Y_STORE_LIST_SEARCH_STORE": "Search stores",
+      "PIP_ACCESSORIES_CATEGORY_ARIA_DESCRIPTION": "Show {catalogName}. Opens in modal.",
+      "PIP_ACCESSORIES_CTA": "Show all accessories",
+      "PIP_ACCESSORIES_MODAL_DESCRIPTION": "Complete the look with these hand-picked products that go perfectly with this {productName}.",
+      "PIP_ADD_TO_CART_CURRENTLY_NOT_SOLD_ONLINE": "Currently not sold online",
+      "PIP_ADD_TO_CART_NOT_SOLD": "Discontinued",
+      "PIP_ADD_TO_CART_ONLY_SOLD_IN_STORE": "Only sold in-store",
+      "PIP_ADD_TO_CART_SOLD_OUT_ONLINE": "Sold out online",
+      "PIP_ADD_TO_CART_SOLD_OUT": "Sold out",
+      "PIP_ADD_TO_CART_UNAVAILABLE_ONLINE_FOR_SELECTED_AREAS": "Unavailable online for selected areas",
+      "PIP_ADD_TO_CART": "Add to bag",
+      "PIP_ADD_TO_IGIFT": "Add to gift registry",
+      "PIP_ADD_X_TO_CART": "Add {productCount} items to cart",
+      "PIP_ADDED_TO_CART": "Added",
+      "PIP_ARIA_LABEL_TEXT_OPENS_IN_A_NEW_TAB": "{text} (opens in a new tab)",
+      "PIP_ARTICLE_NUMBER_LABEL": "Article Number",
+      "PIP_BUY_MODULE_ON_DISPLAY": "On display at the store",
+      "PIP_CLEAR_ALL": "Clear all",
+      "PIP_COLLECT_FROM_PRICE_MODAL": "Starting at {price}",
+      "PIP_COLLECT_PRICE_FREE_MODAL": "Calculated at checkout",
+      "PIP_DELIVERY_HEADING_REGIONAL": "Delivery to your region",
+      "PIP_DELIVERY_PRICE_FREE": "For free",
+      "PIP_DELIVERY_PRICE_PARCEL_FROM_PUP": "From {price} at the nearest pick up point",
+      "PIP_DELIVERY_PRICE": "From {price}",
+      "PIP_DELIVERY_REGIONAL_DISCLOSURE_CTA": "enter your Zip code",
+      "PIP_DELIVERY_REGIONAL_DISCLOSURE": "Delivery availability has been estimated based on your region. For more accurate information please {enterPostcodeLinkText}",
+      "PIP_DELIVERY_TIME": "Expected arrival: {fromDate} - {toDate}",
+      "PIP_ECO_WEEE_FEE_EXCLUDE": "",
+      "PIP_ECO_WEEE_FEE_LINK_TEXT": "",
+      "PIP_ENERGY_ENRICHMENT_TEXT": "Energy information",
+      "PIP_HEADING_ACCESSORIES": "Accessories for {name}",
+      "PIP_HIGHLIGHTED_REVIEWS_AVERAGE_RATING": "Average rating",
+      "PIP_HIGHLIGHTED_REVIEWS_CTA": "Show all reviews",
+      "PIP_HIGHLIGHTED_REVIEWS_HEADING": "Customer reviews",
+      "PIP_HIGHLIGHTED_REVIEWS_SKIP_SECTION": "Skip customer reviews",
+      "PIP_HIGHLIGHTED_REVIEWS_TOTAL": "Reviews",
+      "PIP_HOME_SMART_POLICY_LINK_ARIA_LABEL": "Home smart policy",
+      "PIP_HOW_TO_GET_IT": "How to get it",
+      "PIP_KEY_FACT_MODAL_TITLE": "Highlights",
+      "PIP_MOQ_DISCLOSURE": "You need to order at least {moQuantity} when buying online",
+      "PIP_MOQ_PRICE_LABEL": "Online min. order quantity: {moQuantity}",
+      "PIP_MORE_WAYS_TO_PAY_CHECKING_STATUS": "Checking payment options...",
+      "PIP_MORE_WAYS_TO_PAY": "More ways to pay",
+      "PIP_MULTIPLE_PACKAGES": "{numberOfPackages} packages",
+      "PIP_MUST_BE_COMPLETED_A11Y_QTY_LABEL": "Select required quantity",
+      "PIP_NEAREST_STORES_LABEL_NO_DISTANCE_SINGLE": "{productName} is in stock at one store around you",
+      "PIP_NEAREST_STORES_LABEL_NO_DISTANCE": "{productName} is in stock at {storeCount} stores around you",
+      "PIP_NO_JAVASCRIPT": "You must enable JavaScript to shop on IKEA.com",
+      "PIP_ONE_PACKAGE": "1 package",
+      "PIP_PLACE_ORDER_MODAL_MESSAGE": "Come visit our store to try this product or similar option. An IKEA co-worker can help place an order for you.",
+      "PIP_PRODUCT_DETAILS_MATERIAL": "Material",
+      "PIP_PRODUCT_GALLERY_MODAL_TAB_ALL_MEDIA": "All media",
+      "PIP_PRODUCT_GALLERY_MODAL_TAB_MEASUREMENT": "Measurement",
+      "PIP_PRODUCT_GALLERY_MODAL_TAB_VIDEO": "Video",
+      "PIP_PRODUCT_GALLERY_NO_IMAGE": "Image coming soon",
+      "PIP_PRODUCT_GALLERY_VIDEO_HEADING_ASSEMBLY_INSTRUCTIONS": "Assembly instructions",
+      "PIP_PRODUCT_GALLERY_VIDEO_HEADING_FEATURES_AND_USAGE": "Features and usage",
+      "PIP_QUESTIONS_AND_ANSWERS": "Questions and answers",
+      "PIP_RECENTLY_VIEWED": "Recently viewed",
+      "PIP_RECOMMEND_MUST_BE_COMPLETED_WITH": "Complete with",
+      "PIP_REMOVE_FROM_IGIFT": "Remove from gift registry",
+      "PIP_REMOVE_FROM_SHOPPING_LIST": "Remove from favorites",
+      "PIP_SAVE_TO_SHOPPING_LIST": "Save to favorites",
+      "PIP_REVIEWS_ATTRIBUTE_APPEARANCE": "Customers say {productName} looks great in their home",
+      "PIP_REVIEWS_ATTRIBUTE_EASE_OF_ASSEMBLY": "Customers say {productName}  is simple to put together",
+      "PIP_REVIEWS_ATTRIBUTE_PRODUCT_QUALITY": "Customers are happy with {productName}’s quality",
+      "PIP_REVIEWS_ATTRIBUTE_VALUE_FOR_MONEY": "Customers say {productName} delivers good value for money",
+      "PIP_REVIEWS_ATTRIBUTE_WORKS_AS_EXPECTED": "Customers are happy {productName} works the way they hoped",
+      "PIP_SAVED_TO_SHOPPING_LIST": "Saved",
+      "PIP_SERVICES_ASSEMBLY_MODAL_BASE_FEE": "Assembly services require a flat fee of {assemblyServiceFee} per order. This one-time charge is applied at checkout, regardless of how many items you select for assembly. The final price will be available during checkout",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_1_CONTENT": "Assembly by Taskrabbit is available in most metro areas in the US. Availability of Taskers vary based on demand. Visit www.taskrabbit.com/IKEA for a complete list of the metro areas.",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_1_TITLE": "Is Assembly by Taskrabbit available in my area?",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_2_CONTENT": "Furniture assembly and mounting is available for most IKEA items. Taskers follow assembly instructions and will secure items to the wall when specified.",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_2_TITLE": "What is included in my assembly?",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_3_CONTENT": "You can book assembly of your IKEA furniture for as early as tomorrow and up to 90 days in advance.",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_3_TITLE": "When can I book my assembly?",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_4_CONTENT": "When booking through IKEA in store and online through ikea.com, you'll pre-pay for your desired assembly service when you checkout.",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_4_TITLE": "When do I pay for my task?",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_5_CONTENT": "Pricing will be per item, based on the quantity and types of items to be assembled. The final cost will depend on which items you select for assembly. Assembly services require a minimum fee of $52.",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_5_TITLE": "How does pricing work?",
+      "PIP_SERVICES_ASSEMBLY_MODAL_FAQ_TITLE": "Frequently asked questions",
+      "PIP_SERVICES_ASSEMBLY_MODAL_INTRO": "Assembly service is available for {productName} at {zipCode}.",
+      "PIP_SERVICES_ASSEMBLY_MODAL_INTRODUCTION": "Assembly service is available for {productName}at {zipCode}. You can add this service from your shopping cart and schedule your preferred time during checkout.",
+      "PIP_SERVICES_ASSEMBLY_MODAL_LINK": "Learn more about Assembly Service",
+      "PIP_SERVICES_ASSEMBLY_MODAL_MIN_FEE": "Assembly services require a minimum fee of {assemblyServiceFee}. The final cost will depend on which items you select for assembly. This service can be added to individual products in your cart during checkout. You will pre-pay for your desired assembly service when you checkout.",
+      "PIP_SERVICES_ASSEMBLY_MODAL_PARTNER_INTRODUCTION": "This service will be fulfilled by {assemblyProvider}",
+      "PIP_SERVICES_ASSEMBLY_TITLE": "Assembly service",
+      "PIP_SERVICES_FURNITURE_REMOVAL_MODAL_P1": "We'll pick up your old furniture when we deliver your new purchase.",
+      "PIP_SERVICES_FURNITURE_REMOVAL_MODAL_P2": "You can see the list of eligible furniture and add this service from your shopping bag, then schedule your preferred time during checkout.",
+      "PIP_SERVICES_FURNITURE_REMOVAL_MODAL_TITLE": "Furniture removal",
+      "PIP_SERVICES_REMOVAL_MODAL_LINK": "Learn more about the Removal service",
+      "PIP_SERVICES_REMOVAL_MODAL_TITLE": "Removal Service",
+      "PIP_SERVICES_REMOVAL_P1_GENERIC": "We'll take away your old item to make room for your new purchase.",
+      "PIP_SERVICES_REMOVAL_P1_MATTRESS": "We'll take away your old mattress to make room for your new purchase.",
+      "PIP_SERVICES_REMOVAL_P1_SOFA": "We'll take away your old sofa to make room for your new purchase.",
+      "PIP_SERVICES_REMOVAL_P1_WHITEGOODS": "We'll take away your old whitegoods to make room for your new purchase.",
+      "PIP_SERVICES_REMOVAL_P2": "You can add this service from your shopping bag and schedule your preferred time during checkout.",
+      "PIP_SERVICES_SHELF_ASSEMBLY_BASE_FEE": "Have your {productName} professionally assembled for {assemblyPrice} + one time fee.",
+      "PIP_SERVICES_SHELF_ASSEMBLY_MIN_FEE_DISCLOSURE": "*Assembly service starts from {assemblyServiceMinFee}",
+      "PIP_SERVICES_SHELF_ASSEMBLY_MIN_FEE": "Have your {productName} professionally assembled for {assemblyPrice}.",
+      "PIP_SERVICES_SHELF_ASSEMBLY": "Have your {productName} professionally assembled.",
+      "PIP_SERVICES_SHELF_FURNITURE_REMOVAL": "We'll remove your old furniture when we deliver your new purchase",
+      "PIP_SERVICES_SHELF_GENERIC_LINK": "Learn more",
+      "PIP_SERVICES_SHELF_REMOVAL": "Hassle-free removal:",
+      "PIP_SERVICES_SHELF_TITLE": "Available services",
+      "PIP_SOLDOUT_SIMILAR_PRODUCTS_PROMOTING": "Explore products similar to {productName} ",
+      "PIP_STOCK_LINK_CHECK_OTHER_IKEA_STORES": "Check other IKEA stores",
+      "PIP_STOCK_NOTIFICATION_BUTTON_TEXT": "Send me a notification",
+      "PIP_STOCK_NOTIFICATION_CONTACT_TYPE_LABEL": "How do you want to be notified?",
+      "PIP_STOCK_NOTIFICATION_EMAIL_LABEL": "Enter your email address",
+      "PIP_STOCK_NOTIFICATION_ENTER_VALID_EMAIL": "Please enter a valid email address",
+      "PIP_STOCK_NOTIFICATION_ENTER_VALID_PHONE_NUMBER": "Please enter a valid phone number",
+      "PIP_STOCK_NOTIFICATION_ERROR_HEADING": "Something went wrong",
+      "PIP_STOCK_NOTIFICATION_ERROR_MESSAGE": "We had trouble accessing our server. Please try again in a few minutes.",
+      "PIP_STOCK_NOTIFICATION_ERROR_UNSUPPORTED_CLASS_UNIT": "Sorry, stock notification is currently not available.",
+      "PIP_STOCK_NOTIFICATION_ERROR_UNSUPPORTED_CONTACT_TYPE": "Sorry, the contact method you selected is not available. Please try a different method.",
+      "PIP_STOCK_NOTIFICATION_MESSAGE_SUCCESS_CONTENT": "We'll let you know when {productName} is back in stock! If it doesn't become available again after 45 days, we'll reach out about renewing your alerts.",
+      "PIP_STOCK_NOTIFICATION_MESSAGE_SUCCESS_TITLE": "You've successfully signed up!",
+      "PIP_STOCK_NOTIFICATION_OPTION_EMAIL": "By Email",
+      "PIP_STOCK_NOTIFICATION_OPTION_SMS": "By SMS",
+      "PIP_STOCK_NOTIFICATION_PHONE_NUMBER_SAVE_CONFIRMATION": "The phone number {phoneNumber} was added to your IKEA Family profile",
+      "PIP_STOCK_NOTIFICATION_PHONE_NUMBER_SAVE": "Save phone number to my IKEA Family profile",
+      "PIP_STOCK_NOTIFICATION_PHONE_NUMBER_UPDATE_CONFIRMATION": "The phone number in your IKEA Family profile was updated to {phoneNumber}",
+      "PIP_STOCK_NOTIFICATION_PHONE_NUMBER_UPDATE": "Update phone number in my IKEA Family profile",
+      "PIP_STOCK_NOTIFICATION_PRIVACY_POLICY_LINK_TEXT": "IKEA privacy policy",
+      "PIP_STOCK_NOTIFICATION_PRIVACY_POLICY": "I have read and understood the",
+      "PIP_STOCK_NOTIFICATION_SMS_LABEL_HINT": "Include country code if mobile number is registered in another country.",
+      "PIP_STOCK_NOTIFICATION_SMS_LABEL": "Enter your mobile number",
+      "PIP_STOCK_NOTIFICATION_SUBTITLE": "Sign up now for stock alerts and be the first to know when {productName} becomes available again.",
+      "PIP_STOCK_NOTIFICATION_TITLE": "Back in stock alert",
+      "PIP_STOCK_NOTIFICATION_VALIDATION_IKEA_POLICY": "You must agree to IKEA's policy to continue",
+      "PIP_STORE_DETAILS_LINK_TEXT": "Store details",
+      "PIP_STORE_MODAL_LAST_CHECKED": "Last checked: {lastCheckedDate} at {lastCheckedTime}",
+      "PIP_STORE_MODAL_ON_DISPLAY_A_VARIANT": "A similar product is on display at this store",
+      "PIP_STORE_MODAL_ON_DISPLAY_SEVERAL_VARIANTS": "Similar products are on display at this store",
+      "PIP_STORE_MODAL_ON_DISPLAY_THE_PRODUCT": "{productName} is on display at this store",
+      "PIP_STORE_MODAL_PARTS_OF_SPR_AVAILABLE_WHERE_TO_FIND_IT": "Where to find available parts",
+      "PIP_STORE_MODAL_PARTS_OF_SPR_UNAVAILABLE_DESCRIPTION": "Please ask a co-worker to help you with suitable alternatives.",
+      "PIP_STORE_MODAL_PARTS_OF_SPR_UNAVAILABLE_TITLE": "Some parts are out of stock",
+      "PIP_STORE_MODAL_PRODUCT_OVERVIEW_FACT_COUNT": "You'll need to collect {packageCount}.",
+      "PIP_STORE_MODAL_PRODUCT_OVERVIEW_FACT_DIMENSION": "The longest side is {packageMaxLength}, and the widest is {packageMaxWidth}.",
+      "PIP_STORE_MODAL_PRODUCT_OVERVIEW_FACT_WEIGHT_SINGLE": "The package weight is {packageMaxWeight}",
+      "PIP_STORE_MODAL_PRODUCT_OVERVIEW_FACT_WEIGHT": "The heaviest package is {packageMaxWeight}.",
+      "PIP_STORE_MODAL_PRODUCT_OVERVIEW_LOCATION_FS": "Order from a self-service kiosk ",
+      "PIP_STORE_MODAL_PRODUCT_OVERVIEW_LOCATION_SS": "Self-service area",
+      "PIP_STORE_MODAL_PRODUCT_OVERVIEW_TITLE": "Everything about your package",
+      "PIP_STORE_MODAL_TITLE": "IKEA  {storeName}",
+      "PIP_STORE_MODAL_WHERE_TO_GET_IT_MARKET_HALL": "Market hall",
+      "PIP_STORE_MODAL_WHERE_TO_GET_IT_SECTION": "Section",
+      "PIP_STORE_MODAL_WHERE_TO_GET_IT_SHOWROOM": "Showroom",
+      "PIP_STORE_MODAL_WHERE_TO_GET_IT_TITLE": "Where to get it",
+      "PIP_STORE_MODAL_WHERE_TO_GET_IT_WITH_FLOOR_INFO": "{storeLocation}, level {storeFloor}",
+      "PIP_TOTAL_PRICE": "",
+      "PIP_UPSELL_COMPLETE_WITH_MODAL_TEXT": "Pick the perfect combination to complete your {productName}",
+      "PIP_UPSELL_COMPLETE_WITH": "Complete with",
+      "PIP_USP_GUARANTEE_MESSAGE": "Confidence in every purchase",
+      "PIP_USP_SLEEPTRIAL_DAYS": "Try at home for {sleepTrialDays} days.",
+      "PIP_USP_SLEEPTRIAL_MESSAGE": "Don’t love it? Exchange it.",
+      "PIP_ZIP_IN_MODAL_SUBTITLE": "Get your IKEA products sent to your home.",
+      "QUANTITY_PICKER_ARIA_DESCRIBED_BY": "Type in a number or use the up or down arrows to change the quantity",
+      "QUANTITY_PICKER_ARIA_DESCRIPTION": "Type in a number or use arrow up or arrow down to change the quantity. The minimum quantity is {minimumNumber}.",
+      "QUANTITY_PICKER_ARIA_LABEL_DECREASE": "Decrease quantity",
+      "QUANTITY_PICKER_ARIA_LABEL_INCREASE": "Increase quantity",
+      "QUANTITY_PICKER_ARIA_LABEL_INPUT": "Quantity input value",
+      "READ_MORE_LINK_TEXT": "Learn more",
+      "STOCK_DISCLAIMER": "Prices and products in stores may be different from those online.",
+      "STOCK_FIND_AISLE": "Aisle",
+      "STOCK_FIND_SHELF": "Bin",
+      "STORE_BASIC": "Store",
+      "STORE_CHECK_STOCK": "Check availability in store",
+      "STORE_IN_STOCK_BASIC": "In stock",
+      "STORE_IN_STOCK_QUANTITY_DETAILED": "In stock. {quantity} available",
+      "STORE_LIST_CURRENT_LOCATION_FAIL_HEADING": "Unable to locate you",
+      "STORE_LIST_CURRENT_LOCATION_FAIL_TEXT": "Make sure you've allowed your browser to access your current location and try again.",
+      "STORE_LIST_CURRENT_LOCATION_QUERY": "Current location",
+      "STORE_LIST_CURRENT_LOCATION": "Use your current location",
+      "STORE_LIST_DISTANCE_AWAY": "{distance} away",
+      "STORE_LIST_FILTER_BY_AVAILABILITY_FAIL_HEADING": "No stores found",
+      "STORE_LIST_FILTER_BY_AVAILABILITY_FAIL_TEXT": "Sorry, none of the stores seem to have available stock.",
+      "STORE_LIST_FILTER_BY_AVAILABILITY": "Only stores with available stock",
+      "STORE_LIST_SEARCH_FAIL_HEADING": "Location not found",
+      "STORE_LIST_SEARCH_FAIL_TEXT": "Enter a valid location in your country/region and try again.",
+      "STORE_LIST_SEARCH_PLACEHOLDER": "Search by location",
+      "STORE_LIST_SELECT_STORE": "Select store",
+      "STORE_LIST_SORT_BY_DISTANCE_TO_LOCATION": "Stores are sorted by distance to {location}",
+      "STORE_NOT_SOLD_BASIC": "Not sold here",
+      "STORE_OUT_OF_STOCK_BASIC": "Out of stock",
+      "STORE_OUT_OF_STOCK_RESTOCK_DATES_BASIC": "Back: {fromDate}–{toDate}",
+      "STORE_OUT_OF_STOCK_RESTOCK_DATES_DETAILED": "Out of stock. Expected back: {fromDate}–{toDate}",
+      "STORE_PARTS_OF_SPR_BASIC": "{countInStock} of {countAll} parts in stock",
+      "STORE_PLACE_ORDER_BASIC": "Order in store for delivery",
+      "STORE_PLACE_ORDER_SECONDARY_TEXT": "Find this or similar products on display in store",
+      "STORE_RUNNING_LOW_BASIC": "Running low",
+      "STORE_RUNNING_LOW_QUANTITY_DETAILED": "Running low. {quantity} left",
+      "STORE_STOCK_NO_INFO_BASIC": "Stock info unavailable. Please try again.",
+      "STORE_STOCK_NO_INFO_SECONDARY_TEXT": "Please check back later",
+      "XR_VIEWER_AR_BUTTON_LABEL": "Try it in your home",
+      "XR_VIEWER_HEADING": "{productName} 3D view",
+      "XR_VIEWER_LOADING_LABEL": "Loading...",
+      "XR_VIEWER_OPEN_BUTTON_LABEL": "View in 3D",
+      "XR_VIEWER_TOUCH_PROMPT_LABEL": "Touch and drag to rotate",
+      "ZIP_IN_CHANGE_OR_FORGET_POST_CODE": "{changePostCodeLinkText} or {forgetPostCodeLinkText}",
+      "ZIP_IN_CHANGE_ZIP_TEXT": "Check for another ZIP code",
+      "ZIP_IN_DELIVERY_INFORMATION_UNAVAILABLE_DESCRIPTION": "Sorry, it seems like something went wrong on our end. Please check whether the product can be delivered to your address at checkout, or try again later.",
+      "ZIP_IN_DELIVERY_NOT_OFFERED_DESCRIPTION": "Sorry, it appears we don’t deliver to that area. ",
+      "ZIP_IN_FORGET_POST_CODE_LINK_TEXT": "forget ZIP code",
+      "ZIP_IN_LIMITED_DELIVERY_MODAL_MESSAGE": "This article is temporarily out of stock in our central warehouse, yet available in (some of) our stores. From the stores, delivery is only possible in combination with a bigger article shipped by truck. Add those bigger articles to your basket and check the cart if it meets the minimum dimensions for home delivery."
+    },
+    "viewItem": {
+      "id": "69578602",
+      "product_buyable_online": 1,
+      "ratings_value": 37,
+      "number_of_ratings": 24,
+      "ratings_views": 1,
+      "assembly_availability_hit": 1
+    },
+    "modalProps": {
+      "ariaLabelBack": "Back to previous screen",
+      "ariaLabelClose": "Close modal"
+    },
+    "pipPriceModuleProps": {
+      "priceModuleProps": {
+        "currentPriceProps": {
+          "integerValue": "249",
+          "decimalValue": "00",
+          "decimalSign": ".",
+          "currencyLabel": "$",
+          "captionPrefix": "Price"
+        },
+        "productName": "GLOSTAD"
+      },
+      "productDescriptionProps": {
+        "descriptionText": "Sofa with chaise, Knisa dark gray"
+      }
+    },
+    "productSummaryProps": {
+      "articleNumberLabel": "Article Number",
+      "description": "GLOSTAD sofa has a simple design which is also comfortable with its thick seat, padded armrests and soft back cushions that sit firmly in place.",
+      "productName": "GLOSTAD",
+      "showAsNonSellableProduct": false,
+      "visibleItemNo": "695.786.02",
+      "locateInStoreLinkText": "Locate product in store"
+    },
+    "contentRecFragmentUrls": {
+      "imc": "/us/en/content-rec/fragments/dynamic/skeleton/compact-feed-imc/compact-feed-imc-fragment.html?productId=69578602",
+      "vugc": "/us/en/content-rec/fragments/dynamic/skeleton/compact-feed-vugc/compact-feed-vugc-fragment.html?productId=69578602"
+    },
+    "accessories": [
+      {
+        "catalogName": "Blankets & throws",
+        "image": {
+          "url": "https://www.ikea.com/us/en/images/products/vitmossa-throw-gray__0603361_pe680780_s5.jpg",
+          "alt": "VITMOSSA grey recycled polyester throw blanket folded neatly, soft fleece material."
+        },
+        "upsells": [
+          {
+            "itemNo": "90304889",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=90304889"
+          },
+          {
+            "itemNo": "90592639",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=90592639"
+          },
+          {
+            "itemNo": "50619773",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=50619773"
+          },
+          {
+            "itemNo": "50583463",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=50583463"
+          },
+          {
+            "itemNo": "20626572",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=20626572"
+          },
+          {
+            "itemNo": "20599583",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=20599583"
+          },
+          {
+            "itemNo": "10583511",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=10583511"
+          },
+          {
+            "itemNo": "60488837",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=60488837"
+          }
+        ]
+      },
+      {
+        "catalogName": "Accent & throw pillows",
+        "image": {
+          "url": "https://www.ikea.com/us/en/images/products/jordkastanj-cushion-gray__1138424_pe879956_s5.jpg",
+          "alt": "JORDKASTANJ cushion, grey, square, geometric pattern, recycled polyester."
+        },
+        "upsells": [
+          {
+            "itemNo": "20587924",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=20587924"
+          },
+          {
+            "itemNo": "60486659",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=60486659"
+          },
+          {
+            "itemNo": "10466611",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=10466611"
+          },
+          {
+            "itemNo": "90474198",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=90474198"
+          },
+          {
+            "itemNo": "60587446",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=60587446"
+          },
+          {
+            "itemNo": "90495426",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=90495426"
+          },
+          {
+            "itemNo": "80598632",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=80598632"
+          },
+          {
+            "itemNo": "70614213",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=70614213"
+          }
+        ]
+      },
+      {
+        "catalogName": "Laptop stands",
+        "image": {
+          "url": "https://www.ikea.com/us/en/images/products/oejulf-laptop-support-dark-gray__1167478_pe891586_s5.jpg",
+          "alt": "The ÖJULF laptop support in black. It a cushioned, curved design with a removable, washable fabric cover and a handle for portability."
+        },
+        "upsells": [
+          {
+            "itemNo": "00559026",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=00559026"
+          }
+        ]
+      },
+      {
+        "catalogName": "Holiday textiles",
+        "image": {
+          "url": "https://www.ikea.com/us/en/images/products/vinterfint-cushion-candy-multicolor__1436264_pe984134_s5.jpg",
+          "alt": "Candy-cane chequered cylinder pillow, green-brown squares on red, festive holiday decor."
+        },
+        "upsells": [
+          {
+            "itemNo": "80615641",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=80615641"
+          }
+        ]
+      },
+      {
+        "catalogName": "Screw kits, wall hooks & more",
+        "image": {
+          "url": "https://www.ikea.com/us/en/images/products/trixig-stick-on-floor-protectors-set-of-20-gray__0662645_pe712772_s5.jpg",
+          "alt": "A set of grey hexagonal felt pads, designed to protect surfaces and prevent scratches, with adhesive backs for easy attachment."
+        },
+        "upsells": [
+          {
+            "itemNo": "80573226",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=80573226"
+          },
+          {
+            "itemNo": "00431151",
+            "fragmentUrl": "/us/en/pip/fragments/upsell/?itemNo=00431151"
+          }
+        ]
+      }
+    ],
+    "breadcrumbsSource": "/us/en/navigation/breadcrumbs/47388.html?page-title=~GLOSTAD~%20Sofa%20with%20chaise&page-url=https://www.ikea.com/us/en/p/glostad-sofa-with-chaise-knisa-dark-gray-s69578602/",
+    "categoryShortcutsProps": {
+      "shortcuts": [
+        {
+          "id": "47388",
+          "name": "Sofas with chaise lounge",
+          "url": "https://www.ikea.com/us/en/cat/sofas-with-chaise-47388/",
+          "productCount": 338,
+          "imageUrl": "https://www.ikea.com/global/assets/range-categorisation/images/product/fabric-sofas-with-chaise-longues-47388.jpeg",
+          "linkType": "sibling"
+        },
+        {
+          "id": "10668",
+          "name": "Loveseats",
+          "url": "https://www.ikea.com/us/en/cat/two-seat-sofas-10668/",
+          "productCount": 174,
+          "imageUrl": "https://www.ikea.com/global/assets/range-categorisation/images/product/two-seat-fabric-sofas-10668.jpeg",
+          "linkType": "sibling"
+        },
+        {
+          "id": "10670",
+          "name": "Three-seat sofas",
+          "url": "https://www.ikea.com/us/en/cat/three-seat-sofas-10670/",
+          "productCount": 330,
+          "imageUrl": "https://www.ikea.com/global/assets/range-categorisation/images/product/three-seat-sofas-10670.jpeg",
+          "linkType": "sibling"
+        },
+        {
+          "id": "10671",
+          "name": "Sectionals",
+          "url": "https://www.ikea.com/us/en/cat/fabric-sectionals-10671/",
+          "productCount": 337,
+          "imageUrl": "https://www.ikea.com/global/assets/range-categorisation/images/product/corner-sofas-10671.jpeg",
+          "linkType": "sibling"
+        }
+      ],
+      "parentCategory": {
+        "name": "Sofas & sectionals",
+        "url": "https://www.ikea.com/us/en/cat/sofas-sectionals-fu003/"
+      },
+      "heading": "Explore more options"
+    },
+    "discoveryFragments": {
+      "buyerProtections": "/us/en/listing/fragments/exp/buyer-protections/?productId=69578602&inline",
+      "offerCountdown": null,
+      "rewardsPromotion": "/us/en/listing/fragments/exp/rewards-promotion/?value=249&inline"
+    },
+    "highlightedReviews": [],
+    "ikeaForBusinessProps": {
+      "url": "/us/en/business-fragments/box/pip/html/index.html"
+    },
+    "listingRecFragments": {
+      "similarProducts": {
+        "src": "/us/en/listing/fragments/product-rec-carousel/similar-products/?baseProduct=69578602",
+        "header": "Related products",
+        "attributionLabel": "rec-pip-similar-products"
+      },
+      "recommendedForYou": {
+        "src": "/us/en/listing/fragments/product-rec-carousel/recommended-for-you/?baseProduct=69578602",
+        "header": "Recommended for you",
+        "attributionLabel": "rec-pip-recommended-for-you"
+      },
+      "moreFrom": {
+        "src": "/us/en/listing/fragments/product-rec-carousel/more-from/?baseProduct=69578602",
+        "header": "More from the ",
+        "attributionLabel": "rec-pip-more-from"
+      },
+      "accessories": {
+        "src": "/us/en/listing/fragments/product-rec-carousel/accessories/?baseProduct=69578602",
+        "header": "Accessories for GLOSTAD",
+        "attributionLabel": "rec-pip-accessories"
+      }
+    },
+    "plannerProps": {
+      "headUrl": "https://www.ikea.com/us/en/planners/v1/fragments/head/?fragments=banner-large",
+      "url": "https://www.ikea.com/us/en/planners/v1/fragments/banner-large/69578602/"
+    },
+    "productInformationSectionProps": {
+      "productDetailsProps": {
+        "accordionObject": {
+          "goodToKnow": {
+            "id": "product-details-good-to-know",
+            "title": "Good to know",
+            "contentProps": {
+              "goodToKnow": [
+                {
+                  "name": "Purchase-/Other information",
+                  "text": "Stationary cover."
+                }
+              ]
+            }
+          },
+          "materialsAndCare": {
+            "id": "product-details-material-and-care",
+            "title": "Materials and care",
+            "contentProps": {
+              "materials": [
+                {
+                  "materials": [
+                    {
+                      "material": "100% polyester (min. 90% recycled)",
+                      "part": "Fabric:"
+                    },
+                    {
+                      "material": "Polyester wadding",
+                      "part": "Smolder resistant lining:"
+                    },
+                    {
+                      "material": "Steel, Steel, Epoxy/polyester powder coating",
+                      "part": "Back frame:"
+                    },
+                    {
+                      "material": "Plywood, Laminated veneer lumber, Steel, Steel, Epoxy/polyester powder coating",
+                      "part": "Seat frame:"
+                    },
+                    {
+                      "material": "Steel, Epoxy/polyester powder coating",
+                      "part": "Armrest:"
+                    },
+                    {
+                      "material": "Polyurethane foam 1.5 lb/cu.ft., Felt liner, Steel",
+                      "part": "Seat:"
+                    },
+                    {
+                      "material": "100 % polyester - hollow fiber (100% recycled), 30% cut polyurethane foam/ 70% polyester fibers, Polyurethane foam",
+                      "part": "Backrest cushion:"
+                    },
+                    {
+                      "material": "Polypropylene",
+                      "part": "Leg:"
+                    },
+                    {
+                      "material": "Steel, Galvanized",
+                      "part": "Metal part:"
+                    }
+                  ],
+                  "productType": "Sofa"
+                },
+                {
+                  "materials": [
+                    {
+                      "material": "100% polyester (min. 90% recycled)",
+                      "part": "Fabric:"
+                    },
+                    {
+                      "material": "100 % polypropylene, Particleboard, Solid wood, Felt liner, Steel, Laminated veneer lumber",
+                      "part": "Frame:"
+                    },
+                    {
+                      "material": "Polyurethane foam 1.5 lb/cu.ft.",
+                      "part": "Seat:"
+                    },
+                    {
+                      "material": "Polypropylene, Steel, Epoxy/polyester powder coating",
+                      "part": "Leg:"
+                    },
+                    {
+                      "material": "Steel, Galvanized",
+                      "part": "Metal part:"
+                    }
+                  ],
+                  "productType": "Ottoman"
+                }
+              ],
+              "materialsAndCareLinks": [],
+              "careInstructions": [
+                {
+                  "header": "Frame, non-removable cover",
+                  "productType": "Sofa/ottoman",
+                  "texts": [
+                    "Vacuum clean.",
+                    "Wipe clean with a damp cloth."
+                  ]
+                }
+              ],
+              "proposition65": [],
+              "detailsMaterialText": "Material",
+              "detailsCareText": "Care",
+              "ariaOpensInNewTabLabel": "{text} (opens in a new tab)",
+              "warningText": "Warning"
+            }
+          },
+          "safetyAndCompliance": {
+            "id": "product-details-safety-and-compliance",
+            "title": "Safety and compliance",
+            "contentProps": {
+              "safetyAndCompliance": [
+                {
+                  "name": "Test results and compliance",
+                  "text": "This cover’s ability to resist abrasion has been tested to handle 40,000 cycles. 15,000 cycles or more is suitable for furniture used every day at home. Over 30,000 cycles means a good ability to resist abrasion."
+                },
+                {
+                  "name": "Test results and compliance",
+                  "text": "The cover has a lightfastness level of 5-6 (the ability to resist color fading) on a scale of 1 to 8. According to industry standards, a lightfastness level of 4 or higher is suitable for home use."
+                },
+                {
+                  "name": "Test results and compliance",
+                  "text": "This seating furniture is tested and complies with relevant strength and durability standards. The tests simulate typical usage of the product and are based on use by persons weighing up to 242 lbs."
+                }
+              ],
+              "safetyAndComplianceLinks": [],
+              "ariaOpensInNewTabLabel": "{text} (opens in a new tab)"
+            }
+          },
+          "assemblyAndDocuments": {
+            "id": "product-details-assembly-and-documents",
+            "title": "Assembly and documents",
+            "contentProps": {
+              "ariaOpensInNewTabLabel": "{text} (opens in a new tab)",
+              "assemblyVideos": [],
+              "attachments": {
+                "assembly": {
+                  "header": "Assembly instructions",
+                  "attachments": [
+                    {
+                      "id": "405.959.42",
+                      "url": "https://www.ikea.com/us/en/assembly_instructions/glostad-sofa-knisa-dark-gray__AA-2506407-2-100.pdf",
+                      "label": "GLOSTAD Sofa"
+                    },
+                    {
+                      "id": "605.959.36",
+                      "url": "https://www.ikea.com/us/en/assembly_instructions/glostad-ottoman-knisa-dark-gray__AA-2506395-2-100.pdf",
+                      "label": "GLOSTAD Ottoman"
+                    }
+                  ]
+                },
+                "software": {
+                  "header": "Software",
+                  "attachments": []
+                },
+                "declaration": {
+                  "header": "Declaration of Conformity",
+                  "attachments": []
+                },
+                "other": {
+                  "header": "Other documents",
+                  "attachments": []
+                },
+                "customerDisassembly": {
+                  "header": "Disassembly instructions",
+                  "attachments": []
+                },
+                "professionalDisassembly": {
+                  "header": "Disassembly & Recycling (For industry professionals)",
+                  "attachments": []
+                },
+                "manual": {
+                  "header": "Advice and care instructions",
+                  "attachments": [
+                    {
+                      "id": "405.959.42",
+                      "url": "https://www.ikea.com/us/en/manuals/glostad-sofa-knisa-dark-gray__AA-2144060-1-2.pdf",
+                      "label": "GLOSTAD Sofa"
+                    },
+                    {
+                      "id": "405.959.42",
+                      "url": "https://www.ikea.com/us/en/manuals/glostad-sofa-knisa-dark-gray__AA-2314490-1-100.pdf",
+                      "label": "GLOSTAD Sofa"
+                    },
+                    {
+                      "id": "405.959.42",
+                      "url": "https://www.ikea.com/us/en/manuals/glostad-sofa-knisa-dark-gray__AA-2666808-2-100.pdf",
+                      "label": "GLOSTAD Sofa"
+                    },
+                    {
+                      "id": "605.959.36",
+                      "url": "https://www.ikea.com/us/en/manuals/glostad-ottoman-knisa-dark-gray__AA-2666808-2-100.pdf",
+                      "label": "GLOSTAD Ottoman"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "articleNumberLabel": "Article Number",
+        "productDescriptionProps": {
+          "paragraphs": [
+            "A sofa with small dimensions, which is easy to furnish with, even when space is limited.",
+            "The design allows us to use the material more efficiently in production, which is good for the planet – and helps us give you a lower price.",
+            "The slightly angled legs make the sofa stable, while giving it a personal expression.",
+            "The sofa's low weight makes it easy to move – in your current home or when moving to a new home.",
+            "This cover is made from Knisa fabric in polyester, which is dope-dyed. It’s a durable material which has a soft feel.",
+            "10 year Limited warranty. Read about the terms in the warranty brochure."
+          ],
+          "designerLabel": "Designer",
+          "designerName": ""
+        },
+        "productId": "69578602",
+        "title": "Product details"
+      },
+      "includedProductsProps": {
+        "eventLabel": "pip_whats_included",
+        "includedProductCardsProps": [
+          {
+            "additionalText": "",
+            "image": {
+              "alt": "Dark grey GLOSTAD sofa with slim legs, plush cushions, modern minimalist design.",
+              "height": 2000,
+              "id": "1234948_PE917261",
+              "imageFileName": "1234948_PE917261_S5.JPG",
+              "orientation": "SQUARE",
+              "type": "MAIN_PRODUCT_IMAGE",
+              "url": "https://www.ikea.com/us/en/images/products/glostad-sofa-knisa-dark-gray__1234948_pe917261_s5.jpg",
+              "width": 2000
+            },
+            "subtitle": "GLOSTAD",
+            "title": "1 x Sofa",
+            "url": "https://www.ikea.com/us/en/p/glostad-sofa-knisa-dark-gray-40595942/",
+            "visibleItemNo": "405.959.42"
+          },
+          {
+            "additionalText": "",
+            "image": {
+              "alt": "GLOSTAD footstool: dark grey, fabric and metal, square, modern design.",
+              "height": 2000,
+              "id": "1234946_PE917259",
+              "imageFileName": "1234946_PE917259_S5.JPG",
+              "orientation": "SQUARE",
+              "type": "MAIN_PRODUCT_IMAGE",
+              "url": "https://www.ikea.com/us/en/images/products/glostad-ottoman-knisa-dark-gray__1234946_pe917259_s5.jpg",
+              "width": 2000
+            },
+            "subtitle": "GLOSTAD",
+            "title": "1 x Ottoman",
+            "url": "https://www.ikea.com/us/en/p/glostad-ottoman-knisa-dark-gray-60595936/",
+            "visibleItemNo": "605.959.36"
+          }
+        ],
+        "section": "included-products",
+        "subTitle": "This product is made up of more than one component. You can find the details of these components below.",
+        "title": "What's included"
+      },
+      "measurementsProps": {
+        "chooseDifferentSizeLinkText": "Choose a different size",
+        "eventLabel": "pip_measurements",
+        "fallbackImage": {
+          "alt": "Modern dark grey GLOSTAD sofa with matching footrest. Clean lines, padded cushions, and metal legs.",
+          "height": 2000,
+          "id": "1234952_PE917265",
+          "imageFileName": "1234952_PE917265_S5.JPG",
+          "orientation": "square",
+          "type": "MAIN_PRODUCT_IMAGE",
+          "url": "https://www.ikea.com/us/en/images/products/glostad-sofa-with-chaise-knisa-dark-gray__1234952_pe917265_s5.jpg",
+          "width": 2000
+        },
+        "images": [
+          {
+            "alt": "Illustration with measurements for the product: GLOSTAD.",
+            "height": 2000,
+            "id": "1387199_PE964151",
+            "imageFileName": "1387199_PE964151_S5.JPG",
+            "orientation": "square",
+            "type": "MEASUREMENT_ILLUSTRATION",
+            "url": "https://www.ikea.com/us/en/images/products/glostad-sofa-with-chaise-knisa-dark-gray__1387199_pe964151_s5.jpg",
+            "width": 2000
+          },
+          {
+            "alt": "Illustration with measurements for the product: GLOSTAD.",
+            "height": 2000,
+            "id": "1387091_PE964080",
+            "imageFileName": "1387091_PE964080_S5.JPG",
+            "orientation": "square",
+            "type": "MEASUREMENT_ILLUSTRATION",
+            "url": "https://www.ikea.com/us/en/images/products/glostad-sofa-with-chaise-knisa-dark-gray__1387091_pe964080_s5.jpg",
+            "width": 2000
+          }
+        ],
+        "measurements": [
+          {
+            "measure": "22 1/2 \"",
+            "name": "Armrest height",
+            "type": "00138"
+          },
+          {
+            "measure": "30 3/4 \"",
+            "name": "Depth",
+            "type": "00044"
+          },
+          {
+            "measure": "9 \"",
+            "name": "Height under furniture",
+            "type": "00242"
+          },
+          {
+            "measure": "26 3/4 \"",
+            "name": "Height",
+            "type": "00041"
+          },
+          {
+            "measure": "21 1/4 \"",
+            "name": "Seat depth",
+            "type": "00036"
+          },
+          {
+            "measure": "48 \"",
+            "name": "Seat depth, chaise lounge",
+            "type": "00253"
+          },
+          {
+            "measure": "16 1/8 \"",
+            "name": "Seat height",
+            "type": "00039"
+          },
+          {
+            "measure": "64 5/8 \"",
+            "name": "Seat width",
+            "type": "00037"
+          },
+          {
+            "measure": "22 7/8 \"",
+            "name": "Seat width, chaise lounge",
+            "type": "00254"
+          },
+          {
+            "measure": "67 3/8 \"",
+            "name": "Width",
+            "type": "00047"
+          },
+          {
+            "measure": "57 1/2 \"",
+            "name": "Depth chaise",
+            "type": "00371"
+          }
+        ],
+        "packaging": {
+          "id": "measurements-packaging",
+          "title": "Packaging",
+          "contentProps": {
+            "numberOfPackages": 2,
+            "packages": [
+              {
+                "name": "GLOSTAD",
+                "typeName": "Sofa with chaise",
+                "itemNo": "69578602",
+                "articleNumber": {
+                  "label": "Article Number",
+                  "value": "695.786.02"
+                },
+                "measurements": [],
+                "quantity": {
+                  "label": "Package(s)",
+                  "value": 1
+                },
+                "multiPackDisclaimerText": "This product has multiple packages."
+              },
+              {
+                "name": "GLOSTAD",
+                "typeName": "Sofa",
+                "itemNo": "40595942",
+                "articleNumber": {
+                  "label": "Article Number",
+                  "value": "405.959.42"
+                },
+                "measurements": [
+                  [
+                    {
+                      "label": "Width",
+                      "type": "width",
+                      "text": "25 ½ \"",
+                      "value": 25.5
+                    },
+                    {
+                      "label": "Height",
+                      "type": "height",
+                      "text": "7 ½ \"",
+                      "value": 7.5
+                    },
+                    {
+                      "label": "Length",
+                      "type": "length",
+                      "text": "68 ¾ \"",
+                      "value": 68.75
+                    },
+                    {
+                      "label": "Weight",
+                      "type": "weight",
+                      "text": "57 lb 5 oz",
+                      "value": 57.312
+                    }
+                  ]
+                ],
+                "quantity": {
+                  "label": "Package(s)",
+                  "value": 1
+                },
+                "multiPackDisclaimerText": null
+              },
+              {
+                "name": "GLOSTAD",
+                "typeName": "Ottoman",
+                "itemNo": "60595936",
+                "articleNumber": {
+                  "label": "Article Number",
+                  "value": "605.959.36"
+                },
+                "measurements": [
+                  [
+                    {
+                      "label": "Width",
+                      "type": "width",
+                      "text": "23 ½ \"",
+                      "value": 23.5
+                    },
+                    {
+                      "label": "Height",
+                      "type": "height",
+                      "text": "7 ½ \"",
+                      "value": 7.5
+                    },
+                    {
+                      "label": "Length",
+                      "type": "length",
+                      "text": "27 ½ \"",
+                      "value": 27.5
+                    },
+                    {
+                      "label": "Weight",
+                      "type": "weight",
+                      "text": "18 lb 1 oz",
+                      "value": 18.062
+                    }
+                  ]
+                ],
+                "quantity": {
+                  "label": "Package(s)",
+                  "value": 1
+                },
+                "multiPackDisclaimerText": null
+              }
+            ],
+            "totalNoOfPackagesText": "This product comes as 2 packages.",
+            "maxMeasurements": {
+              "weightText": "57 lb 5 oz",
+              "widthText": "25 ½ \"",
+              "lengthText": "68 ¾ \"",
+              "heightText": "7 ½ \"",
+              "diameterText": ""
+            }
+          }
+        },
+        "title": "Measurements"
+      },
+      "seoReviewsProps": {
+        "reviews": [
+          {
+            "date": "2026-02-03T17:26:14Z",
+            "name": "Haohui",
+            "ratingValue": 2,
+            "text": "The pillows do not fit at all. I was given three pillows that were each 1.5 times the size of the supposed size so I cannot fit the pillows into the case and they are just left outside. The parts are also not manufactured well so they do not fit together out of the box, you need to make adjustments to get the parts together.",
+            "title": "Doesn't Fit"
+          }
+        ],
+        "title": "Reviews"
+      }
+    },
+    "hasServiceOffers": true,
+    "serverExperiments": {
+      "reviews_redesign_v2": "b",
+      "category_shortcuts": "a"
+    },
+    "version": "2.43.0"
+  }
+}

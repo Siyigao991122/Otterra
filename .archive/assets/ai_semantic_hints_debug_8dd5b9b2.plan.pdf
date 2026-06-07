@@ -1,0 +1,412 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 2032 >>
+stream
+BT
+/F1 11 Tf
+15 TL
+54 727 Td
+(---) Tj
+T*
+(name: AI Semantic Hints Debug) Tj
+T*
+(overview: Add a debug-only GPT-4o vision analysis step that renders the PDF floorplan to an ) Tj
+T*
+(image, sends it to OpenAI, and returns structured semantic hints \(page type, unit outline, ) Tj
+T*
+(space classifications, open-plan envelopes\) as a debug artifact on the existing geometry-) Tj
+T*
+(first payload.) Tj
+T*
+(todos:) Tj
+T*
+(  - id: create-hints-module) Tj
+T*
+(    content: Create `lib/geometryFirst/floorplanAiSemanticHints.ts` with PDF-to-image ) Tj
+T*
+(rendering, GPT-4o vision call, and JSON parsing) Tj
+T*
+(    status: pending) Tj
+T*
+(  - id: add-types) Tj
+T*
+(    content: Add `FloorplanAiSemanticHintsDebug` interface and field to ) Tj
+T*
+(`GeometryFirstDebugPayload` in types.ts) Tj
+T*
+(    status: pending) Tj
+T*
+(  - id: wire-route) Tj
+T*
+(    content: Wire `includeAiSemanticHints` option into the API route and attach result to ) Tj
+T*
+(debug payload) Tj
+T*
+(    status: pending) Tj
+T*
+(  - id: add-exports) Tj
+T*
+(    content: Export new function and type from index.ts) Tj
+T*
+(    status: pending) Tj
+T*
+(  - id: test-run) Tj
+T*
+(    content: Run a test with the tower_6_B.pdf to verify end-to-end) Tj
+T*
+(    status: pending) Tj
+T*
+(isProject: false) Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(AI Floorplan Semantic Hints \(Debug-Only\)) Tj
+T*
+() Tj
+T*
+(Architecture) Tj
+T*
+() Tj
+T*
+(The AI step runs **outside** the synchronous `buildGeometryFirstDebugPayload` ? it is called) Tj
+T*
+( from the API route where `pdfBytes` is available, and its result is attached to the debug ) Tj
+T*
+(payload afterward. This avoids making the main debug builder async.) Tj
+T*
+() Tj
+T*
+(```mermaid) Tj
+T*
+(sequenceDiagram) Tj
+T*
+(    participant Route as route.ts) Tj
+T*
+(    participant Extract as runGeometryFirstExtraction) Tj
+T*
+(    participant Debug as buildGeometryFirstDebugPayload) Tj
+T*
+(    participant AI as buildFloorplanAiSemanticHints) Tj
+T*
+(    participant OpenAI as GPT-4o Vision API) Tj
+T*
+() Tj
+T*
+(    Route->>Extract: pdfBytes) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Length 2377 >>
+stream
+BT
+/F1 11 Tf
+15 TL
+54 727 Td
+(    Extract-->>Route: result \(primitives\)) Tj
+T*
+(    Route->>Debug: result.primitives, opts) Tj
+T*
+(    Debug-->>Route: debugPayload \(sync\)) Tj
+T*
+(    Route->>AI: pdfBytes, opts) Tj
+T*
+(    AI->>AI: render PDF page 1 to PNG \(pdfjs-dist + @napi-rs/canvas\)) Tj
+T*
+(    AI->>AI: downscale via sharp if needed) Tj
+T*
+(    AI->>OpenAI: base64 PNG + structured prompt) Tj
+T*
+(    OpenAI-->>AI: strict JSON) Tj
+T*
+(    AI-->>Route: FloorplanAiSemanticHintsDebug) Tj
+T*
+(    Route->>Route: attach to debugPayload.aiSemanticHints) Tj
+T*
+(```) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Files to Create / Modify) Tj
+T*
+() Tj
+T*
+(1. NEW: `lib/geometryFirst/floorplanAiSemanticHints.ts`) Tj
+T*
+() Tj
+T*
+(Core async function with three responsibilities:) Tj
+T*
+() Tj
+T*
+(? **PDF-to-image**: Use `pdfjs-dist` \(already in deps\) + `@napi-rs/canvas` \(already in deps\)) Tj
+T*
+( to render page 1 to a canvas, then export as PNG buffer. Reuse `ensurePdfJsCanvasGlobals\(\)`) Tj
+T*
+( from `[lib/geometryFirst/pdfJsNodePolyfills.ts]\(lib/geometryFirst/pdfJsNodePolyfills.ts\)`. ) Tj
+T*
+(Render at **2x scale** \(~1200-1600px long edge for typical A4/Letter\). Downscale with ) Tj
+T*
+(`sharp` if needed \(cap at 2048px long edge\).) Tj
+T*
+(? **Vision API call**: `fetch\("https://api.openai.com/v1/chat/completions"\)` with `gpt-4o`, ) Tj
+T*
+(`response_format: { type: "json_object" }`, and `temperature: 0.15`. Same pattern as ) Tj
+T*
+(`[app/api/analyze-floorplan/route.ts]\(app/api/analyze-floorplan/route.ts\)` lines 301-311. ) Tj
+T*
+(Gracefully return `null` if `OPENAI_API_KEY` is missing or the call fails.) Tj
+T*
+(? **Prompt**: Instruct the model to return strict JSON with coordinates in **PDF page pixel ) Tj
+T*
+(units** \(matching the geometry pipeline's coordinate system, not meters\). Explicitly ) Tj
+T*
+(distinguish `enclosed_room` vs `open_plan_subzone` for major spaces, allow KITCHEN + ) Tj
+T*
+(LIVING/DINING to share an open-plan envelope.) Tj
+T*
+() Tj
+T*
+(Signature:) Tj
+T*
+() Tj
+T*
+(```typescript) Tj
+T*
+(export async function buildFloorplanAiSemanticHints\() Tj
+T*
+(  pdfBytes: Uint8Array,) Tj
+T*
+(  opts?: { renderScale?: number; maxEdgePx?: number; pageIndex?: number }) Tj
+T*
+(\): Promise<FloorplanAiSemanticHintsDebug | null>) Tj
+T*
+(```) Tj
+T*
+() Tj
+T*
+(2. MODIFY: `[lib/geometryFirst/types.ts]\(lib/geometryFirst/types.ts\)`) Tj
+T*
+() Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Length 1595 >>
+stream
+BT
+/F1 11 Tf
+15 TL
+54 727 Td
+(Add the output interface \(before `GeometryFirstDebugPayload`\):) Tj
+T*
+() Tj
+T*
+(```typescript) Tj
+T*
+(export interface FloorplanAiSemanticHintsDebug {) Tj
+T*
+(  pageType: string) Tj
+T*
+(  unitOutlineHint: {) Tj
+T*
+(    vertices: Array<{ x: number; y: number }>) Tj
+T*
+(    confidence: number) Tj
+T*
+(    notes?: string) Tj
+T*
+(  }) Tj
+T*
+(  majorSpaces: Array<{) Tj
+T*
+(    label: string) Tj
+T*
+(    spaceType: "enclosed_room" | "open_plan_subzone") Tj
+T*
+(    approxPolygon: Array<{ x: number; y: number }>) Tj
+T*
+(    confidence: number) Tj
+T*
+(  }>) Tj
+T*
+(  sharedOpenPlanEnvelopes: Array<{) Tj
+T*
+(    memberLabels: string[]) Tj
+T*
+(    approxPolygon: Array<{ x: number; y: number }>) Tj
+T*
+(    confidence: number) Tj
+T*
+(  }>) Tj
+T*
+(  auxiliarySpaces: Array<{) Tj
+T*
+(    label: string) Tj
+T*
+(    approxPolygon: Array<{ x: number; y: number }>) Tj
+T*
+(    confidence: number) Tj
+T*
+(  }>) Tj
+T*
+(  notes: string[]) Tj
+T*
+(  modelUsed: string) Tj
+T*
+(  renderPx: { width: number; height: number }) Tj
+T*
+(  latencyMs: number) Tj
+T*
+(  rawModelResponse?: string) Tj
+T*
+(}) Tj
+T*
+(```) Tj
+T*
+() Tj
+T*
+(Add to `GeometryFirstDebugPayload`:) Tj
+T*
+() Tj
+T*
+(```typescript) Tj
+T*
+(aiSemanticHints?: FloorplanAiSemanticHintsDebug) Tj
+T*
+(```) Tj
+T*
+() Tj
+T*
+(3. MODIFY: `[app/api/floorplan-geometry-first/route.ts]\(app/api/floorplan-geometry-) Tj
+T*
+(first/route.ts\)`) Tj
+T*
+() Tj
+T*
+(? Add `includeAiSemanticHints?: boolean` to the `debug` options type.) Tj
+T*
+(? After `buildGeometryFirstDebugPayload` returns, if `includeAiSemanticHints` is true and ) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Length 1794 >>
+stream
+BT
+/F1 11 Tf
+15 TL
+54 727 Td
+(`pdfBytes` is available, call `buildFloorplanAiSemanticHints\(pdfBytes\)`.) Tj
+T*
+(? Attach result to `result._debugGeometryFirst.aiSemanticHints`.) Tj
+T*
+(? Increase `maxDuration` from 60 to 120 \(vision API can take 15-30s\).) Tj
+T*
+() Tj
+T*
+(4. MODIFY: `[lib/geometryFirst/index.ts]\(lib/geometryFirst/index.ts\)`) Tj
+T*
+() Tj
+T*
+(? Export `buildFloorplanAiSemanticHints` and `FloorplanAiSemanticHintsDebug` type.) Tj
+T*
+() Tj
+T*
+(Prompt Design \(Key Points\)) Tj
+T*
+() Tj
+T*
+(? All coordinates in PDF page pixel units \(origin top-left, x right, y down\)) Tj
+T*
+(? `page_type`: one of `"residential_brochure_floorplan"`, `"architectural_drawing"`, ) Tj
+T*
+(`"site_plan"`, `"other"`) Tj
+T*
+(? `unit_outline_hint`: approximate outer boundary vertices \(clockwise loop\)) Tj
+T*
+(? `major_spaces[]`: each with `label`, `space_type` \(`enclosed_room` | `open_plan_subzone`\),) Tj
+T*
+( `approx_polygon`, `confidence`) Tj
+T*
+(? `shared_open_plan_envelopes[]`: groups like KITCHEN + LIVING/DINING sharing one open ) Tj
+T*
+(envelope) Tj
+T*
+(? `auxiliary_spaces[]`: corridors, storage, utility, balcony) Tj
+T*
+(? `notes[]`: free-text observations) Tj
+T*
+() Tj
+T*
+(Key Design Decisions) Tj
+T*
+() Tj
+T*
+(? **Coordinates in PDF pixels, not meters** ? matches the geometry pipeline; avoids scale ) Tj
+T*
+(estimation errors from the model) Tj
+T*
+(? **Async, outside the sync debug builder** ? cleanest integration, no refactor of existing ) Tj
+T*
+(code) Tj
+T*
+(? **Graceful null return** ? no API key or API failure produces `null`, pipeline continues ) Tj
+T*
+(unaffected) Tj
+T*
+(? **Debug-only** ? gated behind `includeAiSemanticHints` flag, production unchanged) Tj
+T*
+(? `**rawModelResponse` field** ? stores the raw JSON string for debugging prompt issues) Tj
+T*
+() Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Pages /Kids [7 0 R 8 0 R 9 0 R 10 0 R] /Count 4 >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+9 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+endobj
+10 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+endobj
+11 0 obj
+<< /Type /Catalog /Pages 6 0 R >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000002169 00000 n 
+0000004598 00000 n 
+0000006245 00000 n 
+0000008091 00000 n 
+0000008167 00000 n 
+0000008293 00000 n 
+0000008419 00000 n 
+0000008545 00000 n 
+0000008672 00000 n 
+trailer
+<< /Size 12 /Root 11 0 R >>
+startxref
+8722
+%%EOF

@@ -13,11 +13,13 @@ import { FURNITURE_CATALOG } from "@/lib/furniture-catalog"
 
 interface AIChatPanelProps {
   onAddFurniture: (furniture: Furniture) => void
+  onMoveFurniture?: (id: string, position: [number, number, number]) => void
+  selectedFurnitureId?: string | null
   placedFurniture: Furniture[]
   roomDimensions: RoomDimensions
 }
 
-export function AIChatPanel({ onAddFurniture, placedFurniture, roomDimensions }: AIChatPanelProps) {
+export function AIChatPanel({ onAddFurniture, onMoveFurniture, selectedFurnitureId, placedFurniture, roomDimensions }: AIChatPanelProps) {
   const [input, setInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -133,7 +135,15 @@ Your room is ${roomDimensions.width}m × ${roomDimensions.depth}m. What style ar
                     <Card
                       key={idx}
                       className="p-3 mt-2 bg-muted/50 hover:bg-muted transition-colors cursor-pointer group"
-                      onClick={() => onAddFurniture(furniture)}
+                      onClick={() => {
+                        // If a piece of furniture is already selected in the scene,
+                        // move it to the suggested position instead of adding a new one.
+                        if (selectedFurnitureId && onMoveFurniture) {
+                          onMoveFurniture(selectedFurnitureId, furniture.position)
+                        } else {
+                          onAddFurniture(furniture)
+                        }
+                      }}
                     >
                       <div className="flex items-center gap-3">
                         <div
@@ -153,7 +163,7 @@ Your room is ${roomDimensions.width}m × ${roomDimensions.depth}m. What style ar
                           variant="ghost"
                           className="opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                          <Plus className="w-4 h-4" />
+                          {selectedFurnitureId ? <span className="text-xs">Move</span> : <Plus className="w-4 h-4" />}
                         </Button>
                       </div>
                     </Card>

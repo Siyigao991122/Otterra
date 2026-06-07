@@ -1,0 +1,310 @@
+import { rectangleFootprintFromAABB } from "@/lib/floorplanGeometry"
+import type { FloorplanGeometry, FloorplanPoint2D, FloorplanWallSegment } from "@/lib/types"
+import { extractPdfVectorPrimitives } from "@/lib/geometryFirst/extractPdfVectorPrimitives"
+
+type Line = {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  source?: string
+}
+
+type TextRun = {
+  text: string
+  x: number
+  y: number
+  pageIndex: number
+  width?: number
+  height?: number
+}
+
+type BBox = {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+const PLAN_PAD = 14
+const WALL_MIN_LEN = 7
+const WEAK_MIN_LEN = 1.5
+const AXIS_TOL_DEG = 8
+const WEAK_CONNECTOR_NEAR_WALL_PT = 8
+const FIXTURE_KEEP_RADIUS = 34
+const APARTMENT_TEXT_PAD = 88
+
+const FIXTURE_TEXT_RE = /\b(WC|DW|DC|REF|OV|MW|W\/D)\b/i
+const APARTMENT_ROOM_TEXT_RE =
+  /\b(PRIMARY BEDROOM|BEDROOM\s*\d*|PRIMARY BATH(?:\s*\d+)?|BATH(?:ROOM)?(?:\s*\d+)?|KITCHEN|LIVING|DINING|FOYER|WIC)\b/i
+
+export interface PdfVectorStructuralAnalysisResult {
+  geometry: FloorplanGeometry
+  apartmentBoxPdf: BBox
+  structuralLineCount: number
+  strongWallCount: number
+  notes: string[]
+}
+
+function segmentLength(line: Line): number {
+  return Math.hypot(line.x2 - line.x1, line.y2 - line.y1)
+}
+
+function midpoint(line: Line): { x: number; y: number } {
+  return { x: (line.x1 + line.x2) / 2, y: (line.y1 + line.y2) / 2 }
+}
+
+function angleDegrees(line: Line): number {
+  return (Math.atan2(Math.abs(line.y2 - line.y1), Math.abs(line.x2 - line.x1)) * 180) / Math.PI
+}
+
+function isNearAxis(line: Line, tolDeg = AXIS_TOL_DEG): boolean {
+  const ang = angleDegrees(line)
+  return ang <= tolDeg || 90 - ang <= tolDeg
+}
+
+function bboxFromLines(lines: Line[]): BBox | null {
+  if (!lines.length) return null
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const line of lines) {
+    minX = Math.min(minX, line.x1, line.x2)
+    minY = Math.min(minY, line.y1, line.y2)
+    maxX = Math.max(maxX, line.x1, line.x2)
+    maxY = Math.max(maxY, line.y1, line.y2)
+  }
+  return { minX, minY, maxX, maxY }
+}
+
+function expandBox(box: BBox, pad: number): BBox {
+  return {
+    minX: box.minX - pad,
+    minY: box.minY - pad,
+    maxX: box.maxX + pad,
+    maxY: box.maxY + pad,
+  }
+}
+
+function pointInBox(x: number, y: number, box: BBox): boolean {
+  return x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY
+}
+
+function lineTouchesBox(line: Line, box: BBox): boolean {
+  if (pointInBox(line.x1, line.y1, box) || pointInBox(line.x2, line.y2, box)) return true
+  const m = midpoint(line)
+  return pointInBox(m.x, m.y, box)
+}
+
+function textBox(text: TextRun, pad = 0): BBox {
+  const width = text.width ?? Math.max(6, text.text.length * 4.5)
+  const height = text.height ?? 8
+  return {
+    minX: text.x - pad,
+    minY: text.y - height - pad,
+    maxX: text.x + width + pad,
+    maxY: text.y + pad,
+  }
+}
+
+function bboxFromBoxes(boxes: BBox[]): BBox | null {
+  if (!boxes.length) return null
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const box of boxes) {
+    minX = Math.min(minX, box.minX)
+    minY = Math.min(minY, box.minY)
+    maxX = Math.max(maxX, box.maxX)
+    maxY = Math.max(maxY, box.maxY)
+  }
+  return { minX, minY, maxX, maxY }
+}
+
+function pointToSegmentDistance(
+  px: number,
+  py: number,
+  line: Line
+): { distance: number; x: number; y: number } {
+  const vx = line.x2 - line.x1
+  const vy = line.y2 - line.y1
+  const len2 = vx * vx + vy * vy
+  if (len2 <= 1e-9) {
+    return { distance: Math.hypot(px - line.x1, py - line.y1), x: line.x1, y: line.y1 }
+  }
+  const t = Math.max(0, Math.min(1, ((px - line.x1) * vx + (py - line.y1) * vy) / len2))
+  const x = line.x1 + vx * t
+  const y = line.y1 + vy * t
+  return { distance: Math.hypot(px - x, py - y), x, y }
+}
+
+function nearestWallProjection(
+  px: number,
+  py: number,
+  walls: Line[],
+  maxDist: number
+): { x: number; y: number } | null {
+  let best: { distance: number; x: number; y: number } | null = null
+  for (const wall of walls) {
+    const hit = pointToSegmentDistance(px, py, wall)
+    if (hit.distance > maxDist) continue
+    if (!best || hit.distance < best.distance) best = hit
+  }
+  return best ? { x: best.x, y: best.y } : null
+}
+
+function snapLineToWalls(line: Line, walls: Line[], maxDist: number): Line {
+  const p1 = nearestWallProjection(line.x1, line.y1, walls, maxDist)
+  const p2 = nearestWallProjection(line.x2, line.y2, walls, maxDist)
+  return {
+    ...line,
+    x1: p1?.x ?? line.x1,
+    y1: p1?.y ?? line.y1,
+    x2: p2?.x ?? line.x2,
+    y2: p2?.y ?? line.y2,
+  }
+}
+
+function dedupeLines(lines: Line[]): Line[] {
+  const out: Line[] = []
+  const seen = new Set<string>()
+  for (const line of lines) {
+    const r = (n: number) => (Math.round(n * 10) / 10).toFixed(1)
+    const a = `${r(line.x1)},${r(line.y1)},${r(line.x2)},${r(line.y2)}`
+    const b = `${r(line.x2)},${r(line.y2)},${r(line.x1)},${r(line.y1)}`
+    const key = a < b ? a : b
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(line)
+  }
+  return out
+}
+
+function deriveApartmentArea(page: { pageBounds: BBox; lines: Line[]; texts: TextRun[] }): BBox {
+  const rawLineBox = bboxFromLines(page.lines)
+  const planBox = expandBox(
+    rawLineBox ?? {
+      minX: page.pageBounds.minX,
+      minY: page.pageBounds.minY,
+      maxX: page.pageBounds.maxX,
+      maxY: page.pageBounds.maxY,
+    },
+    PLAN_PAD
+  )
+
+  const roomTextBoxes = page.texts
+    .filter((text) => APARTMENT_ROOM_TEXT_RE.test(text.text) && pointInBox(text.x, text.y, planBox))
+    .map((text) => textBox(text, APARTMENT_TEXT_PAD))
+
+  if (!roomTextBoxes.length) return expandBox(planBox, -Math.min(PLAN_PAD - 2, 10))
+
+  const anchorBox = bboxFromBoxes(roomTextBoxes) ?? planBox
+  const anchoredLines = page.lines.filter((line) => lineTouchesBox(line, anchorBox))
+  const anchoredLineBox = bboxFromLines(anchoredLines)
+
+  return expandBox(anchoredLineBox ?? anchorBox, 12)
+}
+
+function mapPoint(
+  p: FloorplanPoint2D,
+  source: BBox,
+  target: BBox
+): FloorplanPoint2D {
+  const sourceW = Math.max(1e-6, source.maxX - source.minX)
+  const sourceH = Math.max(1e-6, source.maxY - source.minY)
+  const targetW = target.maxX - target.minX
+  const targetH = target.maxY - target.minY
+  return {
+    x: target.minX + ((p.x - source.minX) / sourceW) * targetW,
+    y: target.minY + ((p.y - source.minY) / sourceH) * targetH,
+  }
+}
+
+function toWallSegments(lines: Line[], sourceBox: BBox, targetBox: BBox): FloorplanWallSegment[] {
+  return lines.map((line, index) => {
+    const p1 = mapPoint({ x: line.x1, y: line.y1 }, sourceBox, targetBox)
+    const p2 = mapPoint({ x: line.x2, y: line.y2 }, sourceBox, targetBox)
+    return {
+      id: `vector-wall-${index}`,
+      x1: p1.x,
+      y1: p1.y,
+      x2: p2.x,
+      y2: p2.y,
+      thickness: 0.12,
+    }
+  })
+}
+
+export async function analyzePdfVectorStructure(
+  pdfBytes: Uint8Array,
+  opts: { targetWidth: number; targetDepth: number }
+): Promise<PdfVectorStructuralAnalysisResult | null> {
+  const { primitives } = await extractPdfVectorPrimitives(pdfBytes)
+  const page = primitives[0]
+  if (!page) return null
+
+  const apartmentBox = deriveApartmentArea({
+    pageBounds: page.pageBounds,
+    lines: page.lines,
+    texts: page.texts,
+  })
+
+  const croppedLines = page.lines.filter((line) => lineTouchesBox(line, apartmentBox))
+  const strongWalls = croppedLines.filter(
+    (line) => segmentLength(line) >= WALL_MIN_LEN && isNearAxis(line)
+  )
+  const fixtureTexts = page.texts.filter(
+    (text) => FIXTURE_TEXT_RE.test(text.text) && pointInBox(text.x, text.y, apartmentBox)
+  )
+  const fixtureSupportLines = croppedLines.filter((line) => {
+    const m = midpoint(line)
+    return fixtureTexts.some((text) => Math.hypot(m.x - text.x, m.y - text.y) <= FIXTURE_KEEP_RADIUS)
+  })
+  const weakConnectorsRaw = croppedLines.filter((line) => {
+    const len = segmentLength(line)
+    if (len < WEAK_MIN_LEN || len >= WALL_MIN_LEN) return false
+    const nearWall =
+      nearestWallProjection(line.x1, line.y1, strongWalls, WEAK_CONNECTOR_NEAR_WALL_PT) != null ||
+      nearestWallProjection(line.x2, line.y2, strongWalls, WEAK_CONNECTOR_NEAR_WALL_PT) != null
+    const nearFixture = fixtureSupportLines.some((base) => {
+      const m = midpoint(line)
+      const mb = midpoint(base)
+      return Math.hypot(m.x - mb.x, m.y - mb.y) <= FIXTURE_KEEP_RADIUS
+    })
+    return nearWall || nearFixture || !isNearAxis(line)
+  })
+  const weakConnectors = weakConnectorsRaw.map((line) =>
+    snapLineToWalls(line, strongWalls, WEAK_CONNECTOR_NEAR_WALL_PT)
+  )
+  const structuralLines = dedupeLines([...strongWalls, ...fixtureSupportLines, ...weakConnectors])
+
+  if (!structuralLines.length) return null
+
+  const targetFootprint = rectangleFootprintFromAABB(opts.targetWidth, opts.targetDepth)
+  const targetBox = {
+    minX: -opts.targetWidth / 2,
+    minY: -opts.targetDepth / 2,
+    maxX: opts.targetWidth / 2,
+    maxY: opts.targetDepth / 2,
+  }
+
+  return {
+    geometry: {
+      units: "m",
+      footprintPolygon: targetFootprint,
+      interiorWalls: toWallSegments(structuralLines, apartmentBox, targetBox),
+      confidence: 0.72,
+      rawText: page.texts
+        .filter((text) => pointInBox(text.x, text.y, apartmentBox))
+        .map((text) => text.text),
+    },
+    apartmentBoxPdf: apartmentBox,
+    structuralLineCount: structuralLines.length,
+    strongWallCount: strongWalls.length,
+    notes: [
+      `Vector PDF structure applied (${structuralLines.length} structural lines, ${strongWalls.length} strong walls).`,
+    ],
+  }
+}

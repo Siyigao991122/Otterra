@@ -3,13 +3,19 @@
 /**
  * FurnitureModel: renders proxy geometry or GLB.
  *
- * Axis semantics (Three.js Y-up):
- * - X = width  (left-right)
- * - Y = height (up)
- * - Z = depth  (front-back)
+ * Axis semantics (Three.js Y-up) — explicit DB ↔ GLB mapping:
+ * - Three X  ← raw GLB AABB size.x  ← target `dimensions.width`  ← DB `width_m`
+ * - Three Y  ← raw GLB AABB size.y  ← target `dimensions.height` ← DB `height_m`
+ * - Three Z  ← raw GLB AABB size.z  ← target `dimensions.depth`  ← DB `length_m` (front–back)
  *
- * furniture.dimensions: { width, height, depth } map to X, Y, Z.
- * See lib/dimensionSemantics.ts for DB mapping.
+ * GLB files may be authored in any local orientation; we only rescale the loaded root’s axis-aligned
+ * bounding box (AABB) to match those targets. We do not rotate to “fix” Z-up models.
+ *
+ * Calibration:
+ * - `dimensionsAuthoritative === true` (catalog sizes): per-axis scale so final AABB matches targets.
+ * - Otherwise: uniform scale = min(scaleX, scaleY, scaleZ) capped (legacy “fit inside” proxy box).
+ *
+ * See lib/dimensionSemantics.ts for product-table semantics.
  */
 
 import {
@@ -45,14 +51,40 @@ function ProxyBox({ furniture }: { furniture: Furniture }) {
   )
 }
 
+export type GlbCalibrationMode = "per-axis-exact" | "uniform-fit-inside" | "fallback-identity"
+
+/** Dev-oriented sanity flag; see `evaluateGlbCalibrationSanity` rules in this file. */
+export type GlbSuspiciousCalibrationReason =
+  | "degenerate-bbox"
+  | "extreme-axis-scale"
+  | "likely-axis-mismatch"
+  | "missing-authoritative-dims"
+
 export interface GlbBboxInfo {
+  /** Axis-aligned size of the GLB at root scale (1,1,1), in Three.js world units (meters). */
   raw: { x: number; y: number; z: number }
+  /**
+   * Uniform factor for quick display; equals scaleAxis.x in uniform-fit mode,
+   * or cube root of (sx·sy·sz) in per-axis mode.
+   */
   scale: number
+  /** Per-axis scale applied to the GLB root: raw.{x,y,z} * scaleAxis.{x,y,z} → target extents. */
+  scaleAxis: { x: number; y: number; z: number }
+  /** Expected AABB after scaling (should match target when calibration succeeded). */
   scaled: { x: number; y: number; z: number }
+  /** Target extents (m): X width, Y height, Z depth — same as `furniture.dimensions`. */
+  target: { x: number; y: number; z: number }
+  calibrationMode: GlbCalibrationMode
+  /** True when a dev-only sanity rule tripped (axis/units mismatch, bad inputs, etc.). */
+  suspiciousCalibration: boolean
+  /** Primary reason when `suspiciousCalibration`; null when calibration looks sane. */
+  suspiciousReason: GlbSuspiciousCalibrationReason | null
 }
 
-/** Set false to silence bbox report diagnostics. */
-const BBOX_REPORT_DEBUG = true
+const IS_DEV = process.env.NODE_ENV === "development"
+
+/** Verbose bbox logs (development only). */
+const BBOX_REPORT_DEBUG = IS_DEV
 
 /** When true, all GLB meshes use a flat gray material (local debug; turn off for real PBR). */
 const DEBUG_OVERRIDE_MODEL_MATERIAL = false
@@ -73,22 +105,50 @@ export function normalizeGlbBboxInfo(info: GlbBboxInfo): GlbBboxInfo {
   const rx = normalizeScalar(info.raw.x)
   const ry = normalizeScalar(info.raw.y)
   const rz = normalizeScalar(info.raw.z)
+  const sax = normalizeScalar(info.scaleAxis.x)
+  const say = normalizeScalar(info.scaleAxis.y)
+  const saz = normalizeScalar(info.scaleAxis.z)
   const sc = normalizeScalar(info.scale)
+  const tx = normalizeScalar(info.target.x)
+  const ty = normalizeScalar(info.target.y)
+  const tz = normalizeScalar(info.target.z)
   return {
     raw: { x: rx, y: ry, z: rz },
     scale: sc,
+    scaleAxis: { x: sax, y: say, z: saz },
     scaled: {
-      x: normalizeScalar(rx * sc),
-      y: normalizeScalar(ry * sc),
-      z: normalizeScalar(rz * sc),
+      x: normalizeScalar(rx * sax),
+      y: normalizeScalar(ry * say),
+      z: normalizeScalar(rz * saz),
     },
+    target: { x: tx, y: ty, z: tz },
+    calibrationMode: info.calibrationMode,
+    suspiciousCalibration: info.suspiciousCalibration,
+    suspiciousReason: info.suspiciousReason,
   }
 }
 
 export function glbBboxInfoKey(info: GlbBboxInfo): string {
   const n = normalizeGlbBboxInfo(info)
   const r = (x: number) => (Number.isFinite(x) ? x.toFixed(BBOX_ROUND_DECIMALS) : "nan")
-  return `${r(n.raw.x)},${r(n.raw.y)},${r(n.raw.z)},${r(n.scale)},${r(n.scaled.x)},${r(n.scaled.y)},${r(n.scaled.z)}`
+  return [
+    r(n.raw.x),
+    r(n.raw.y),
+    r(n.raw.z),
+    r(n.scaleAxis.x),
+    r(n.scaleAxis.y),
+    r(n.scaleAxis.z),
+    r(n.scale),
+    r(n.scaled.x),
+    r(n.scaled.y),
+    r(n.scaled.z),
+    r(n.target.x),
+    r(n.target.y),
+    r(n.target.z),
+    n.calibrationMode,
+    String(n.suspiciousCalibration),
+    n.suspiciousReason ?? "",
+  ].join(",")
 }
 
 export function glbBboxInfoEqual(a: GlbBboxInfo | null, b: GlbBboxInfo | null): boolean {
@@ -113,6 +173,241 @@ function getRawModelSizeIdentity(scene: THREE.Object3D): THREE.Vector3 {
   scene.scale.copy(backup)
   scene.updateMatrixWorld(true)
   return v
+}
+
+const BBOX_EPS = 1e-6
+/** Legacy cap: uniform “fit inside” scale for non-authoritative / proxy dimensions. */
+const UNIFORM_FIT_MAX_SCALE = 10
+
+/** Dev-only soft band: outside this suggests wrong units or huge mesh-vs-DB mismatch. */
+const SANITY_SCALE_SOFT_MIN = 0.33
+const SANITY_SCALE_SOFT_MAX = 3
+/** Per-axis: max(scaleAxis) / min(scaleAxis) above this is suspicious (axis swap or bad asset). */
+const SANITY_AXIS_SCALE_SPREAD_MAX = 8
+/** “Boxy” raw + target (aspect < 2) but highly skewed per-axis scales → possible axis mismatch. */
+const SANITY_BOXY_ASPECT_MAX = 2
+const SANITY_MISMATCH_MIN_SCALE_SPREAD = 6
+
+function geomMeanScale(sax: number, say: number, saz: number): number {
+  if (![sax, say, saz].every((n) => Number.isFinite(n) && n > 0)) return 1
+  return Math.cbrt(sax * say * saz)
+}
+
+function bboxAspectRatio3(x: number, y: number, z: number): number {
+  if (![x, y, z].every((n) => Number.isFinite(n) && n > BBOX_EPS)) return Number.POSITIVE_INFINITY
+  return Math.max(x, y, z) / Math.min(x, y, z)
+}
+
+interface GlbCalibrationSanityContext {
+  degenerateRaw: boolean
+  dimensionsAuthoritative?: boolean
+  partialAuthoritativeTargets: boolean
+  allAuthoritativeTargetsInvalid: boolean
+  furnitureId?: string
+  furnitureName?: string
+}
+
+/**
+ * Dev-only sanity checks after numeric calibration. Production path: only sets flags, no console in prod.
+ *
+ * Priority (first match wins for `suspiciousReason`):
+ * 1. degenerate-bbox — raw AABB invalid on load
+ * 2. missing-authoritative-dims — authoritative mode but target(s) missing/invalid
+ * 3. likely-axis-mismatch — boxy GLB + boxy DB targets but per-axis scales differ by ≥6× (see constants)
+ * 4. extreme-axis-scale — any scale outside [0.33, 3] OR inter-axis scale spread > 8 (per-axis mode)
+ *
+ * Uniform-fit mode: only checks single uniform factor outside [0.33, 3].
+ */
+function attachCalibrationSanity(info: GlbBboxInfo, ctx: GlbCalibrationSanityContext): GlbBboxInfo {
+  let suspiciousReason: GlbSuspiciousCalibrationReason | null = null
+
+  if (ctx.degenerateRaw) {
+    suspiciousReason = "degenerate-bbox"
+  } else if (
+    ctx.dimensionsAuthoritative === true &&
+    (ctx.partialAuthoritativeTargets || ctx.allAuthoritativeTargetsInvalid)
+  ) {
+    suspiciousReason = "missing-authoritative-dims"
+  } else if (info.calibrationMode === "per-axis-exact") {
+    const sx = info.scaleAxis.x
+    const sy = info.scaleAxis.y
+    const sz = info.scaleAxis.z
+    const scalesPositive = [sx, sy, sz].every((v) => Number.isFinite(v) && v > 0)
+    const spread =
+      scalesPositive && sx > 0 && sy > 0 && sz > 0 ? Math.max(sx, sy, sz) / Math.min(sx, sy, sz) : 1
+
+    const rawAspect = bboxAspectRatio3(info.raw.x, info.raw.y, info.raw.z)
+    const tgtAspect = bboxAspectRatio3(info.target.x, info.target.y, info.target.z)
+    const likelyAxisMismatch =
+      rawAspect < SANITY_BOXY_ASPECT_MAX &&
+      tgtAspect < SANITY_BOXY_ASPECT_MAX &&
+      spread >= SANITY_MISMATCH_MIN_SCALE_SPREAD
+
+    const anySoftOutOfBand =
+      sx < SANITY_SCALE_SOFT_MIN ||
+      sx > SANITY_SCALE_SOFT_MAX ||
+      sy < SANITY_SCALE_SOFT_MIN ||
+      sy > SANITY_SCALE_SOFT_MAX ||
+      sz < SANITY_SCALE_SOFT_MIN ||
+      sz > SANITY_SCALE_SOFT_MAX
+    const extremeSpread = scalesPositive && spread > SANITY_AXIS_SCALE_SPREAD_MAX
+
+    if (likelyAxisMismatch) suspiciousReason = "likely-axis-mismatch"
+    else if (anySoftOutOfBand || extremeSpread) suspiciousReason = "extreme-axis-scale"
+  } else if (info.calibrationMode === "uniform-fit-inside") {
+    const u = info.scaleAxis.x
+    if (u < SANITY_SCALE_SOFT_MIN || u > SANITY_SCALE_SOFT_MAX) {
+      suspiciousReason = "extreme-axis-scale"
+    }
+  }
+
+  const suspiciousCalibration = suspiciousReason != null
+
+  if (IS_DEV && suspiciousCalibration) {
+    console.warn("[furniture-model] Suspicious GLB calibration", {
+      reason: suspiciousReason,
+      furnitureId: ctx.furnitureId ?? "(unknown)",
+      furnitureTitle: ctx.furnitureName ?? "(unknown)",
+      rawGLB: info.raw,
+      targetM: info.target,
+      scaleAxis: info.scaleAxis,
+      calibrationMode: info.calibrationMode,
+    })
+  }
+
+  return {
+    ...info,
+    suspiciousCalibration,
+    suspiciousReason,
+  }
+}
+
+/**
+ * Deterministic scale from raw GLB AABB to scene targets (meters).
+ * See file header for X/Y/Z ↔ DB field mapping.
+ */
+function computeGlbCalibration(input: {
+  raw: { x: number; y: number; z: number }
+  targetWidth: number
+  targetHeight: number
+  targetDepth: number
+  dimensionsAuthoritative?: boolean
+  furnitureId?: string
+  furnitureName?: string
+}): GlbBboxInfo {
+  const {
+    raw,
+    targetWidth,
+    targetHeight,
+    targetDepth,
+    dimensionsAuthoritative,
+    furnitureId,
+    furnitureName,
+  } = input
+  const { x: rx, y: ry, z: rz } = raw
+  const target = { x: targetWidth, y: targetHeight, z: targetDepth }
+
+  const rawOk = (v: number) => Number.isFinite(v) && v > BBOX_EPS
+  const targetOk = (v: number) => Number.isFinite(v) && v > BBOX_EPS
+
+  const sanityCtxBase: Omit<GlbCalibrationSanityContext, "degenerateRaw" | "partialAuthoritativeTargets" | "allAuthoritativeTargetsInvalid"> =
+    {
+      dimensionsAuthoritative,
+      furnitureId,
+      furnitureName,
+    }
+
+  if (!rawOk(rx) || !rawOk(ry) || !rawOk(rz)) {
+    const base = normalizeGlbBboxInfo({
+      raw: { x: rx, y: ry, z: rz },
+      scaleAxis: { x: 1, y: 1, z: 1 },
+      scale: 1,
+      scaled: { x: rx, y: ry, z: rz },
+      target,
+      calibrationMode: "fallback-identity",
+      suspiciousCalibration: false,
+      suspiciousReason: null,
+    })
+    return attachCalibrationSanity(base, {
+      ...sanityCtxBase,
+      degenerateRaw: true,
+      partialAuthoritativeTargets: false,
+      allAuthoritativeTargetsInvalid: false,
+    })
+  }
+
+  if (dimensionsAuthoritative) {
+    const sx = targetOk(targetWidth) ? targetWidth / rx : 1
+    const sy = targetOk(targetHeight) ? targetHeight / ry : 1
+    const sz = targetOk(targetDepth) ? targetDepth / rz : 1
+
+    const twOk = targetOk(targetWidth)
+    const thOk = targetOk(targetHeight)
+    const tdOk = targetOk(targetDepth)
+    const allTargetsInvalid = !twOk && !thOk && !tdOk
+    const partialAuthoritativeTargets =
+      !allTargetsInvalid && (!twOk || !thOk || !tdOk)
+
+    if (allTargetsInvalid) {
+      const base = normalizeGlbBboxInfo({
+        raw: { x: rx, y: ry, z: rz },
+        scaleAxis: { x: 1, y: 1, z: 1 },
+        scale: 1,
+        scaled: { x: rx, y: ry, z: rz },
+        target,
+        calibrationMode: "fallback-identity",
+        suspiciousCalibration: false,
+        suspiciousReason: null,
+      })
+      return attachCalibrationSanity(base, {
+        ...sanityCtxBase,
+        degenerateRaw: false,
+        partialAuthoritativeTargets: false,
+        allAuthoritativeTargetsInvalid: true,
+      })
+    }
+
+    const base = normalizeGlbBboxInfo({
+      raw: { x: rx, y: ry, z: rz },
+      scaleAxis: { x: sx, y: sy, z: sz },
+      scale: geomMeanScale(sx, sy, sz),
+      scaled: { x: rx * sx, y: ry * sy, z: rz * sz },
+      target,
+      calibrationMode: "per-axis-exact",
+      suspiciousCalibration: false,
+      suspiciousReason: null,
+    })
+    return attachCalibrationSanity(base, {
+      ...sanityCtxBase,
+      degenerateRaw: false,
+      partialAuthoritativeTargets,
+      allAuthoritativeTargetsInvalid: false,
+    })
+  }
+
+  const scaleX = targetOk(targetWidth) ? targetWidth / rx : Number.POSITIVE_INFINITY
+  const scaleY = targetOk(targetHeight) ? targetHeight / ry : Number.POSITIVE_INFINITY
+  const scaleZ = targetOk(targetDepth) ? targetDepth / rz : Number.POSITIVE_INFINITY
+  let u = Math.min(scaleX, scaleY, scaleZ)
+  if (!Number.isFinite(u) || u <= 0) u = 1
+  u = Math.min(u, UNIFORM_FIT_MAX_SCALE)
+
+  const base = normalizeGlbBboxInfo({
+    raw: { x: rx, y: ry, z: rz },
+    scaleAxis: { x: u, y: u, z: u },
+    scale: u,
+    scaled: { x: rx * u, y: ry * u, z: rz * u },
+    target,
+    calibrationMode: "uniform-fit-inside",
+    suspiciousCalibration: false,
+    suspiciousReason: null,
+  })
+  return attachCalibrationSanity(base, {
+    ...sanityCtxBase,
+    degenerateRaw: false,
+    partialAuthoritativeTargets: false,
+    allAuthoritativeTargetsInvalid: false,
+  })
 }
 
 function applyDebugGrayMaterial(scene: THREE.Object3D) {
@@ -140,41 +435,50 @@ function GLBModelInner({
   targetWidth,
   targetHeight,
   targetDepth,
+  dimensionsAuthoritative,
+  furnitureId,
+  furnitureName,
   onBboxReady,
 }: {
   modelUrl: string
   targetWidth: number
   targetHeight: number
   targetDepth: number
+  dimensionsAuthoritative?: boolean
+  furnitureId?: string
+  furnitureName?: string
   onBboxReady?: (info: GlbBboxInfo) => void
 }) {
   const gltf = useGLTF(modelUrl)
 
   const bboxReport = useMemo(() => {
     const size = getRawModelSizeIdentity(gltf.scene)
-    const sx = size.x
-    const sy = size.y
-    const sz = size.z
-    const eps = 1e-6
-    const scaleX = sx > eps ? targetWidth / sx : 1
-    const scaleY = sy > eps ? targetHeight / sy : 1
-    const scaleZ = sz > eps ? targetDepth / sz : 1
-    const scaleUncached = Math.min(scaleX, scaleY, scaleZ, 10) || 1
-
-    const preNorm: GlbBboxInfo = {
-      raw: { x: sx, y: sy, z: sz },
-      scale: scaleUncached,
-      scaled: { x: sx * scaleUncached, y: sy * scaleUncached, z: sz * scaleUncached },
-    }
-    const normalized = normalizeGlbBboxInfo(preNorm)
+    const raw = { x: size.x, y: size.y, z: size.z }
+    const normalized = computeGlbCalibration({
+      raw,
+      targetWidth,
+      targetHeight,
+      targetDepth,
+      dimensionsAuthoritative,
+      furnitureId,
+      furnitureName,
+    })
     return {
-      rawMeasured: { x: sx, y: sy, z: sz },
-      scaleUncached,
+      rawMeasured: raw,
       normalized,
     }
-  }, [gltf, modelUrl, targetWidth, targetHeight, targetDepth])
+  }, [
+    gltf,
+    modelUrl,
+    targetWidth,
+    targetHeight,
+    targetDepth,
+    dimensionsAuthoritative,
+    furnitureId,
+    furnitureName,
+  ])
 
-  const renderScale = bboxReport.normalized.scale
+  const { x: psx, y: psy, z: psz } = bboxReport.normalized.scaleAxis
 
   /** Dedupes Strict Mode double layout + same gltf.scene uuid within this mount. */
   const debugMaterialAppliedForSceneUuidRef = useRef<string | null>(null)
@@ -195,18 +499,24 @@ function GLBModelInner({
   }, [modelUrl])
 
   useEffect(() => {
-    const { normalized, rawMeasured, scaleUncached } = bboxReport
-    const sx = normalized.raw.x
-    const sy = normalized.raw.y
-    const sz = normalized.raw.z
-    if (![sx, sy, sz, normalized.scale].every((n) => Number.isFinite(n))) return
+    const { normalized, rawMeasured } = bboxReport
+    const fin = (n: number) => Number.isFinite(n)
+    if (
+      !fin(normalized.raw.x) ||
+      !fin(normalized.raw.y) ||
+      !fin(normalized.raw.z) ||
+      !fin(normalized.scaleAxis.x) ||
+      !fin(normalized.scaleAxis.y) ||
+      !fin(normalized.scaleAxis.z)
+    ) {
+      return
+    }
 
     const key = glbBboxInfoKey(normalized)
     if (lastReportedKeyRef.current === key) {
       if (BBOX_REPORT_DEBUG) {
         console.log("[furniture-model:GLBModelInner] bbox report skipped (duplicate key)", {
           rawBeforeNorm: rawMeasured,
-          scaleUncached,
           normalizedKey: key,
         })
       }
@@ -215,16 +525,20 @@ function GLBModelInner({
     lastReportedKeyRef.current = key
     if (BBOX_REPORT_DEBUG) {
       console.log("[furniture-model:GLBModelInner] bbox report emit", {
-        rawBeforeNorm: rawMeasured,
-        scaleUncached,
-        normalized,
+        rawGLB: rawMeasured,
+        targetM: normalized.target,
+        scaleAxis: normalized.scaleAxis,
+        calibrationMode: normalized.calibrationMode,
+        scaled: normalized.scaled,
+        suspiciousCalibration: normalized.suspiciousCalibration,
+        suspiciousReason: normalized.suspiciousReason,
         normalizedKey: key,
       })
     }
     onBboxReadyRef.current?.(normalized)
   }, [bboxReport])
 
-  return <primitive object={gltf.scene} scale={renderScale} />
+  return <primitive object={gltf.scene} scale={[psx, psy, psz]} />
 }
 
 class GLBErrorBoundary extends Component<
@@ -265,6 +579,9 @@ function GLBModel({
           targetWidth={width}
           targetHeight={height}
           targetDepth={depth}
+          dimensionsAuthoritative={furniture.dimensionsAuthoritative}
+          furnitureId={furniture.id}
+          furnitureName={furniture.name}
           onBboxReady={onBboxReady}
         />
       </Suspense>

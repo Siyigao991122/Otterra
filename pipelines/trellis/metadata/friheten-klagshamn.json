@@ -1,0 +1,12 @@
+{
+  "product_id": "friheten-klagshamn",
+  "title": "FRIHETEN / KLAGSHAMN",
+  "product_url": "https://www.ikea.com/us/en/p/friheten-klagshamn-sleeper-sectional-3-seat-w-storage-faringe-light-gray-s49520240/",
+  "target_dims_m": {
+    "width": 2.299,
+    "height": 0.86,
+    "depth": 1.511
+  },
+  "model_url": "/models/friheten-klagshamn.glb",
+  "scaling_note": "Runtime: FurnitureModel scales GLB by bounding box to fit (width, height, depth). DB mapping: width_m→X, length_m→Z, height_m→Y. See lib/dimensionSemantics.ts."
+}

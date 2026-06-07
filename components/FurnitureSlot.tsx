@@ -58,7 +58,11 @@ function ProxyWithSelection({
 }
 
 export function FurnitureSlot({ furniture, product, isSelected, showModelLabel = true, onBboxReady }: FurnitureSlotProps) {
+  console.log("FurnitureSlot product:", product)
+  console.log("FurnitureSlot furniture:", furniture)
   const modelUrl = (product?.model_url ?? furniture.model_url)?.trim()
+  console.log("FurnitureSlot resolved modelUrl:", modelUrl)
+  console.log("FurnitureSlot render path:", modelUrl ? "MODEL" : "PROXY")
   const proxyFallback = (
     <ProxyWithSelection
       furniture={furniture}
@@ -68,6 +72,7 @@ export function FurnitureSlot({ furniture, product, isSelected, showModelLabel =
   )
 
   if (!modelUrl) {
+    console.log("FurnitureSlot falling back to proxy because modelUrl is missing")
     return proxyFallback
   }
 
