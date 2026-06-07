@@ -117,6 +117,7 @@ interface Room3DSceneProps {
   selectedId: string | null
   onSelectFurniture: (id: string | null) => void
   onMoveFurniture: (id: string, position: [number, number, number]) => void
+  onRotateFurniture: (id: string) => void
   onDeleteFurniture: (id: string) => void
   onDropFurniture: (position: [number, number, number]) => void
   isDragging: boolean
@@ -730,60 +731,84 @@ function RoomEnvelopeInSceneLabel({
   )
 }
 
-function SelectionControls({
+/** Live distance-to-wall + furniture dimension labels shown when a piece is selected. */
+function FurnitureMeasurements({
   furniture,
-  onRotate,
-  onDelete,
+  parentGroupRef,
+  roomBounds,
 }: {
   furniture: Furniture
-  onRotate: () => void
-  onDelete: () => void
+  parentGroupRef: React.RefObject<THREE.Group>
+  roomBounds: { minX: number; maxX: number; minZ: number; maxZ: number }
 }) {
-  const stopScenePointer = (e: React.SyntheticEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-  }
+  const posRef = useRef({ x: furniture.position[0], z: furniture.position[2] })
+  const [, tick] = useState(0)
+
+  useFrame(() => {
+    if (!parentGroupRef.current) return
+    const nx = parentGroupRef.current.position.x
+    const nz = parentGroupRef.current.position.z
+    if (Math.abs(nx - posRef.current.x) > 0.005 || Math.abs(nz - posRef.current.z) > 0.005) {
+      posRef.current = { x: nx, z: nz }
+      tick(t => t + 1)
+    }
+  })
+
+  const { x, z } = posRef.current
+  const hw = furniture.dimensions.width / 2
+  const hd = furniture.dimensions.depth / 2
+  const y = furniture.dimensions.height + 0.05
+
+  const dLeft  = Math.max(0, x - hw - roomBounds.minX)
+  const dRight = Math.max(0, roomBounds.maxX - (x + hw))
+  const dFront = Math.max(0, z - hd - roomBounds.minZ)
+  const dBack  = Math.max(0, roomBounds.maxZ - (z + hd))
+
+  // All positions are in LOCAL space (group origin = furniture centre)
+  const localLeft  = roomBounds.minX - x   // world left wall in local coords
+  const localRight = roomBounds.maxX - x
+  const localFront = roomBounds.minZ - z
+  const localBack  = roomBounds.maxZ - z
+
+  const tag = (text: string) => (
+    <div style={{
+      background: "rgba(0,0,0,0.72)",
+      color: "#fff",
+      fontSize: 11,
+      fontWeight: 600,
+      padding: "2px 6px",
+      borderRadius: 4,
+      whiteSpace: "nowrap",
+      pointerEvents: "none",
+      fontFamily: "system-ui, sans-serif",
+      letterSpacing: "0.01em",
+    }}>{text}</div>
+  )
 
   return (
-    <Html position={[0, furniture.dimensions.height + 0.5, 0]} center>
-      <div
-        className="pointer-events-auto flex gap-1 bg-card border border-border rounded-lg p-1 shadow-xl"
-        onMouseDown={stopScenePointer}
-        onPointerDown={stopScenePointer}
-        onClick={stopScenePointer}
-      >
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8"
-          onMouseDown={stopScenePointer}
-          onPointerDown={stopScenePointer}
-          onClick={(e) => {
-            stopScenePointer(e)
-            onRotate()
-          }}
-        >
-          <RotateCw className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8 text-destructive hover:text-destructive"
-          onMouseDown={stopScenePointer}
-          onPointerDown={stopScenePointer}
-          onClick={(e) => {
-            stopScenePointer(e)
-            onDelete()
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-    </Html>
+    <group>
+      {/* Furniture dimensions — centred above */}
+      <Html position={[0, y + 0.18, 0]} center>
+        {tag(`${furniture.dimensions.width.toFixed(2)}m × ${furniture.dimensions.depth.toFixed(2)}m`)}
+      </Html>
+
+      {/* Distance labels: midpoint between furniture edge and wall, in local coords */}
+      <Html position={[(-hw + localLeft) / 2, y, 0]} center>
+        {tag(`← ${dLeft.toFixed(2)}m`)}
+      </Html>
+      <Html position={[(hw + localRight) / 2, y, 0]} center>
+        {tag(`${dRight.toFixed(2)}m →`)}
+      </Html>
+      <Html position={[0, y, (-hd + localFront) / 2]} center>
+        {tag(`↑ ${dFront.toFixed(2)}m`)}
+      </Html>
+      <Html position={[0, y, (hd + localBack) / 2]} center>
+        {tag(`${dBack.toFixed(2)}m ↓`)}
+      </Html>
+    </group>
   )
 }
+
 
 function DraggableFurniture({
   furniture,
@@ -913,7 +938,13 @@ function DraggableFurniture({
       {/*isSelected && (
         <FurnitureInSceneDimensionLabel furniture={furniture} glbBbox={glbBbox} debug={debug} />
       )*/}
-      {isSelected && <SelectionControls furniture={furniture} onRotate={onRotate} onDelete={onDelete} />}
+      {isSelected && (
+        <FurnitureMeasurements
+          furniture={furniture}
+          parentGroupRef={groupRef}
+          roomBounds={roomBounds}
+        />
+      )}
       {/*isSelected && debug && (
         <Html position={[0, furniture.dimensions.height + 0.2, 0]} center>
           <div className="text-xs bg-black/80 text-white rounded px-2 py-1 font-mono whitespace-nowrap max-w-[200px] truncate">
@@ -1345,6 +1376,30 @@ export function Room3DScene(props: Room3DSceneProps) {
       )}
 
         {props.debug && debugOverlayData && <DebugDimensionOverlay data={debugOverlayData} />}
+
+        {/* Furniture action toolbar — pure DOM, no Three.js event conflicts */}
+        {selectedFurniture && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-card/90 backdrop-blur border border-border rounded-full px-3 py-2 shadow-lg pointer-events-auto">
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium hover:bg-muted transition-colors"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); props.onRotateFurniture(selectedFurniture.id) }}
+            >
+              <RotateCw className="w-4 h-4" />
+              Rotate 90°
+            </button>
+            <div className="w-px h-5 bg-border" />
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); props.onDeleteFurniture(selectedFurniture.id) }}
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          </div>
+        )}
+
         {props.isDragging && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-card border border-primary/50 rounded-full px-4 py-2 flex items-center gap-2">
             <Move className="w-4 h-4 text-primary" />

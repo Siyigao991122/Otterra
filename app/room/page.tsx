@@ -347,6 +347,10 @@ function RoomPageContent() {
     })
   }, [])
 
+  const handleRotateFurniture = useCallback((id: string) => {
+    setPlacedFurniture((prev) => prev.map((f) => f.id === id ? { ...f, rotation: (f.rotation + 90) % 360 } : f))
+  }, [])
+
   const handleDeleteFurniture = useCallback((id: string) => {
     setPlacedFurniture((prev) => {
       const next = prev.filter((f) => f.id !== id)
@@ -402,6 +406,7 @@ function RoomPageContent() {
             selectedId={selectedFurnitureId}
             onSelectFurniture={handleSelectFurniture}
             onMoveFurniture={handleMoveFurniture}
+            onRotateFurniture={handleRotateFurniture}
             onDeleteFurniture={handleDeleteFurniture}
             onDropFurniture={() => {}}
             isDragging={false}

@@ -95,6 +95,8 @@ export function DesignEditor() {
                 selectedId={selectedFurnitureId}
                 onSelectFurniture={handleSelectFurniture}
                 onMoveFurniture={handleMoveFurniture}
+                onRotateFurniture={handleRotateFurniture}
+                onDeleteFurniture={handleDeleteFurniture}
                 onDropFurniture={handleDropFurniture}
                 isDragging={!!draggedFurniture}
               />
