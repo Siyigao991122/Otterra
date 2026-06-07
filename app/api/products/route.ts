@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
+import { devProductsFallback, devOfflineFallbackEnabled, supabaseFailureLooksLikeNetwork } from "@/lib/devProductsFallback"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import { supabasePublic } from "@/lib/supabasePublic"
 
-const ALLOWED_CATEGORIES = ["sofa", "bed", "dining_table"] as const
+const ALLOWED_CATEGORIES = ["sofa", "bed", "dining_table", "chair"] as const
 
 function toNum(val: unknown): number | null {
   if (val === null || val === undefined || val === "") return null
@@ -72,7 +73,9 @@ export async function GET(req: NextRequest) {
     const category = searchParams.get("category")?.toLowerCase()
     const brand = searchParams.get("brand")?.trim()
 
-    let query = supabasePublic
+    // Use supabaseAdmin (service role) so RLS doesn't block public catalog reads.
+    // This route runs server-side only — the service role key is never sent to the client.
+    let query = supabaseAdmin
       .from("products")
       .select("*")
       .eq("is_active", true)
@@ -90,13 +93,51 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       console.error("Products fetch error:", error)
+      const offline = devProductsFallback(category ?? null)
+      if (
+        devOfflineFallbackEnabled() &&
+        offline.length > 0 &&
+        supabaseFailureLooksLikeNetwork(error)
+      ) {
+        console.warn(
+          "[api/products] Supabase unreachable; serving local dev catalog (",
+          offline.length,
+          "items). Fix NEXT_PUBLIC_SUPABASE_URL or network to use the real database."
+        )
+        return NextResponse.json({ products: offline })
+      }
       return NextResponse.json({ error: "Failed to fetch products." }, { status: 500 })
+    }
+
+    // In dev mode, if Supabase returned no products, serve the local fallback catalog
+    // so the furniture browser always shows something without needing a populated DB.
+    if ((!data || data.length === 0) && devOfflineFallbackEnabled()) {
+      const offline = devProductsFallback(category ?? null)
+      if (offline.length > 0) {
+        console.warn(
+          "[api/products] Supabase returned 0 products; serving local dev catalog (",
+          offline.length,
+          "items). Add products to Supabase to use the real database."
+        )
+        return NextResponse.json({ products: offline })
+      }
     }
 
     return NextResponse.json({ products: data ?? [] })
   } catch (err) {
     if (err instanceof Error && err.message.includes("Missing Supabase env")) {
       return NextResponse.json({ error: "Server configuration error." }, { status: 500 })
+    }
+    const offline = devProductsFallback(
+      new URL(req.url).searchParams.get("category")?.toLowerCase() ?? null
+    )
+    if (
+      devOfflineFallbackEnabled() &&
+      offline.length > 0 &&
+      supabaseFailureLooksLikeNetwork(err)
+    ) {
+      console.warn("[api/products] Exception talking to Supabase; serving local dev catalog.", err)
+      return NextResponse.json({ products: offline })
     }
     throw err
   }

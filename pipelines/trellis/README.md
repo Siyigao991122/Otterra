@@ -84,6 +84,50 @@ That copies to `public/models/325e9836-68f9-469c-8ed1-c7e9ce9e7555.glb` and writ
 
 ---
 
+## FRIHETEN / KLAGSHAMN — new sectional sofa
+
+Current manifest entry:
+
+- `id`: `friheten-klagshamn`
+- `product_url`: `https://www.ikea.com/us/en/p/friheten-klagshamn-sleeper-sectional-3-seat-w-storage-faringe-light-gray-s49520240/`
+- target dimensions: `2.299 x 1.511 x 0.86 m` (`width x length x height`)
+
+Put source images here:
+
+```text
+pipelines/trellis/source/friheten-klagshamn/
+  front.jpg
+  side.jpg
+  angle.jpg
+```
+
+Expected output path after your TRELLIS run:
+
+```text
+pipelines/trellis/generated/friheten-klagshamn/model.glb
+```
+
+Then export it into the app with:
+
+```bash
+node pipelines/trellis/pipeline.mjs check
+node pipelines/trellis/pipeline.mjs prepare-assets
+```
+
+That will copy the mesh to:
+
+```text
+public/models/friheten-klagshamn.glb
+```
+
+When you are happy with the result, set the product row's `model_url` to:
+
+```text
+/models/friheten-klagshamn.glb
+```
+
+---
+
 ## Folder Structure
 
 ```

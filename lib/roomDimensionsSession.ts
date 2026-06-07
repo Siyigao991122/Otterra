@@ -34,6 +34,7 @@ export function readRoomDimensionsFromSession(): RoomDimensions | null {
       width: parsed.width,
       depth: parsed.depth,
       height: parsed.height,
+      ...(parsed.manualCalibration ? { manualCalibration: parsed.manualCalibration } : {}),
       ...(parsed.geometry ? { geometry: parsed.geometry } : {}),
       ...(parsed.geometryEnvelopeSource ? { geometryEnvelopeSource: parsed.geometryEnvelopeSource } : {}),
     }

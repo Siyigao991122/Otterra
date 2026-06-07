@@ -36,6 +36,15 @@
       "length_m": 1.2,
       "height_m": 0.74,
       "images": ["top.jpg", "angle.jpg"]
+    },
+    {
+      "id": "friheten-klagshamn",
+      "title": "FRIHETEN / KLAGSHAMN",
+      "product_url": "https://www.ikea.com/us/en/p/friheten-klagshamn-sleeper-sectional-3-seat-w-storage-faringe-light-gray-s49520240/",
+      "width_m": 2.299,
+      "length_m": 1.511,
+      "height_m": 0.86,
+      "images": ["front.jpg", "side.jpg", "angle.jpg"]
     }
   ]
 }

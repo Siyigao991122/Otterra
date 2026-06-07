@@ -103,6 +103,8 @@ export function DesignEditor() {
             {showChat && (
               <AIChatPanel
                 onAddFurniture={handleAddFromChat}
+                onMoveFurniture={handleMoveFurniture}
+                selectedFurnitureId={selectedFurnitureId}
                 placedFurniture={placedFurniture}
                 roomDimensions={roomDimensions}
               />

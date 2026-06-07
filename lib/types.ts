@@ -12,6 +12,41 @@ export interface FloorplanWallSegment {
   y2: number
   /** Wall thickness in meters (optional; default in renderer). */
   thickness?: number
+  /**
+   * Semantic role of this wall line:
+   *  - `exterior`: part of the apartment outer shell (close to footprintPolygon boundary)
+   *  - `interior`: a partition wall fully inside the unit
+   *  - `fixture`: an appliance/cabinet/vanity outline (kitchen, bath fixtures, etc.)
+   */
+  wallType?: "exterior" | "interior" | "fixture"
+}
+
+export interface FloorplanDoorOpening {
+  id: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  /** Door opening height in meters. */
+  height?: number
+  /** Optional source hint for rendering/UX. */
+  kind?: "swing" | "sliding" | "opening" | "unknown"
+}
+
+/**
+ * A window cut in an exterior wall. Coordinates describe the window mouth in plan space
+ * (same units as the surrounding `FloorplanGeometry`); height is the head height in meters.
+ */
+export interface FloorplanWindowOpening {
+  id: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  /** Window head height (top of glass) in meters. */
+  height?: number
+  /** Sill height above floor in meters. */
+  sillHeight?: number
 }
 
 export interface FloorplanRoomZone {
@@ -35,6 +70,10 @@ export interface FloorplanGeometry {
   scale?: number
   footprintPolygon: FloorplanPoint2D[]
   interiorWalls?: FloorplanWallSegment[]
+  /** Closed wall-region polygons in floor-plan metre coordinates (x = scene X, y = scene Z). */
+  wallPolygons?: FloorplanPoint2D[][]
+  doorOpenings?: FloorplanDoorOpening[]
+  windowOpenings?: FloorplanWindowOpening[]
   rooms?: FloorplanRoomZone[]
   dimensions?: FloorplanDimensionAnnotation[]
   rawText?: string[]
@@ -53,6 +92,8 @@ export interface RoomDimensions {
   width: number
   depth: number
   height: number
+  /** Optional manual scale calibration captured during upload/review flow. */
+  manualCalibration?: ManualScaleCalibration
   /**
    * When present with a valid `footprintPolygon` (≥3 finite points), the 3D room shell
    * extrudes this polygon instead of an axis-aligned box. `width`/`depth` remain the AABB
@@ -99,6 +140,13 @@ export interface DetectedRoom {
   widthMeters: number
   depthMeters: number
   heightMeters: number
+  /** Normalised 0–1 centre of this room on the floor plan image (from GPT). */
+  cx?: number
+  cy?: number
+  /** Raw dimension text found on the floor plan, e.g. "14'6\" × 20'5\"" */
+  dimensionText?: string
+  /** Whether dimensions came from OCR text on the plan (true) or GPT visual estimate (false) */
+  dimensionsFromOCR?: boolean
 }
 
 /** Stats from parsing interiorWallsMeters (TEMPORARY debug). */
@@ -147,3 +195,13 @@ export interface FloorPlanAnalysis {
   /** Preflight diagnostic from `lib/floorplanPreflight` (upload flow); not used for layout logic. */
   _preflightDiagnostic?: FloorplanPreflightDiagnosticAttachment
 }
+
+export interface ManualScaleCalibration {
+  p1: FloorplanPoint2D
+  p2: FloorplanPoint2D
+  realLengthMeters: number
+  metersPerUnit: number
+  /** Uniform multiplier applied to AI-derived plan metrics after manual calibration. */
+  analysisScaleFactor?: number
+}
+ 

@@ -6,9 +6,7 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start",
-    "geometry-first:sweep": "tsx scripts/geometryFirstPresetSweep.ts tower_6_B.pdf",
-    "geometry-first:compare-cluster": "tsx scripts/compareRobustClusterTower6B.ts tower_6_B.pdf"
+    "start": "next start"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.88",

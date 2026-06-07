@@ -6,10 +6,27 @@ const DESIGN_TIMEOUT_MS = 25_000
 
 export const maxDuration = 30
 
+interface CurrentPlacement {
+  product_id: string
+  title: string
+  position: { x: number; z: number }
+  rotation_y_deg: number
+}
+
+interface RoomZone {
+  name: string
+  /** Scene-space centre in metres (X right, Z into screen). */
+  x: number
+  z: number
+}
+
 interface DesignRequest {
   prompt: string
   room: { width_m: number; depth_m: number; height_m: number }
   category?: string
+  currentPlacements?: CurrentPlacement[]
+  /** Detected room zones with their scene-space positions. */
+  roomZones?: RoomZone[]
 }
 
 interface CatalogProduct extends ProductModelLifecycle {
@@ -217,6 +234,8 @@ export async function POST(req: NextRequest) {
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : ""
     const room = body.room
     const category = body.category ?? "sofa"
+    const roomZones: RoomZone[] = Array.isArray(body.roomZones) ? body.roomZones : []
+    const currentPlacements: CurrentPlacement[] = Array.isArray(body.currentPlacements) ? body.currentPlacements : []
 
     if (
       !room ||
@@ -290,13 +309,24 @@ Return JSON exactly matching this schema:
   "notes": ["string"]
 }`
 
-    const userPrompt = `Room: ${room.width_m}m × ${room.depth_m}m × ${room.height_m}m ceiling.
+    const currentPlacementsText = currentPlacements.length > 0
+      ? `\nCurrently placed furniture (prefer to KEEP these product_ids, just update positions):\n` +
+        currentPlacements.map(p => `- ${p.title} (id: ${p.product_id}) at x=${p.position.x.toFixed(1)}, z=${p.position.z.toFixed(1)}, rot=${p.rotation_y_deg}°`).join("\n") + "\n"
+      : ""
 
+    const roomZonesText = roomZones.length > 0
+      ? `\nRoom zones (scene coordinates, X right / Z into screen, origin = centre):\n` +
+        roomZones.map(z => `- ${z.name}: x=${z.x.toFixed(1)}, z=${z.z.toFixed(1)}`).join("\n") + "\n"
+      : ""
+
+    const userPrompt = `Room: ${room.width_m}m × ${room.depth_m}m × ${room.height_m}m ceiling.
+${roomZonesText}${currentPlacementsText}
 Catalog (use only these ids):
 ${catalogText}
 
 User request: ${prompt || "Design a living room layout"}
 
+Place furniture in the correct functional zone based on the room zones above.
 Return JSON only.`
 
     const controller = new AbortController()
@@ -310,7 +340,7 @@ Return JSON only.`
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "gpt-4o",
+          model: "gpt-5.5",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },

@@ -41,8 +41,8 @@ export function roomLabelWorldPosition(dimensions: RoomDimensions, yLift = 0.22)
   if (fp && isValidFootprintPolygon(fp)) {
     const aabb = polygonAABB(fp)
     const cx = (aabb.minX + aabb.maxX) / 2
-    const cz = (aabb.minY + aabb.maxY) / 2
-    return [cx, yLift, cz]
+    const cy = (aabb.minY + aabb.maxY) / 2
+    return [cx, yLift, -cy]
   }
   return [0, yLift, 0]
 }

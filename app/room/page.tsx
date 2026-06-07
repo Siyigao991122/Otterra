@@ -1,20 +1,27 @@
 "use client"
 
 import { useState, useEffect, useCallback, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { Header } from "@/components/header"
 import { Room3DScene } from "@/components/room-3d-scene"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
-import { ChevronDown, ChevronUp, Sparkles, LayoutGrid, ShoppingCart, Loader2, ExternalLink, Trash2, Camera, Download, Library } from "lucide-react"
+import { ChevronDown, ChevronUp, Sparkles, ShoppingCart, Loader2, ExternalLink, Trash2, Camera, Download, Library } from "lucide-react"
 import type { Furniture, RoomDimensions } from "@/lib/types"
 import { readRoomDimensionsFromSession } from "@/lib/roomDimensionsSession"
-import { addToSelectedWithQty } from "@/lib/selectedFurniture"
-import { getLayout, saveLayout, clearLayout, type Placement as LayoutPlacement } from "@/lib/roomLayout"
+import { addToSelectedWithQty, clearSelected } from "@/lib/selectedFurniture"
+import {
+  getLayout,
+  saveLayout,
+  clearLayout,
+  removePlacement,
+  type Placement as LayoutPlacement,
+} from "@/lib/roomLayout"
 import { extractProductIdFromFurnitureId } from "@/lib/extractProductIdFromFurnitureId"
 import type { ProductModelLifecycle } from "@/lib/productModelLifecycle"
+
 
 const DEFAULT_DIMS: RoomDimensions = { width: 5, depth: 4, height: 2.7 }
 const PROXY_SIZE = { width: 2.0, height: 0.9, depth: 0.8 }
@@ -147,8 +154,10 @@ function furnitureToLayoutPlacements(furniture: Furniture[]): LayoutPlacement[] 
 
 function RoomPageContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const [roomDimensions, setRoomDimensions] = useState<RoomDimensions>(DEFAULT_DIMS)
   const [prompt, setPrompt] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState<"sofa" | "bed" | "dining_table" | "chair">("sofa")
   const [loading, setLoading] = useState(false)
   const [plan, setPlan] = useState<DesignPlan | null>(null)
   const [catalog, setCatalog] = useState<CatalogProduct[]>([])
@@ -200,6 +209,24 @@ function RoomPageContent() {
     setPlan(null)
     setLastResponse("")
     try {
+      // Pass currently placed furniture so AI can move them in-place rather than
+      // replacing them with different products that may not have 3D models.
+      const currentPlacements = placedFurniture
+        .map((f) => {
+          const productId = extractProductIdFromFurnitureId(f.id)
+          if (!productId) return null
+          return { product_id: productId, title: f.name, position: { x: f.position[0], z: f.position[2] }, rotation_y_deg: f.rotation }
+        })
+        .filter(Boolean)
+
+      // Room zones: geometry.rooms stores centroid as a single-point polygon in scene metres
+      const roomZones = (roomDimensions.geometry?.rooms ?? [])
+        .filter(r => r.polygon?.length > 0)
+        .map(r => ({
+          name: r.label ?? "Room",
+          x: r.polygon[0]!.x,
+          z: -r.polygon[0]!.y,  // plan y → world -Z
+        }))
       const res = await fetch("/api/design", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -210,37 +237,47 @@ function RoomPageContent() {
             depth_m: roomDimensions.depth,
             height_m: roomDimensions.height,
           },
-          category: "sofa",
+          category: selectedCategory,
+          currentPlacements: currentPlacements.length > 0 ? currentPlacements : undefined,
+          roomZones: roomZones.length > 0 ? roomZones : undefined,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to generate design")
 
-      setPlan(data.plan)
-      setCatalog(data.catalog ?? [])
+      const fetchedPlan: DesignPlan = data.plan
+      const fetchedCatalog = data.catalog ?? []
+      setPlan(fetchedPlan)
+      setCatalog(fetchedCatalog)
       setLastResponse(JSON.stringify(data, null, 2))
+
+      // Auto-apply the layout immediately — no need for a separate "Apply layout" click.
+      const furniture = fetchedPlan.placements.map((p, i) => {
+        const newItem = designPlacementToFurniture(p, fetchedCatalog, i)
+        const existing = placedFurniture.find((f) => {
+          const existingProductId = extractProductIdFromFurnitureId(f.id)
+          return existingProductId === p.product_id
+        })
+        if (existing?.model_url && !newItem.model_url) {
+          return { ...newItem, model_url: existing.model_url }
+        }
+        return newItem
+      })
+      setPlacedFurniture(furniture)
+      const layout: LayoutPlacement[] = fetchedPlan.placements.map((p) => ({
+        product_id: p.product_id,
+        x: p.position.x,
+        z: p.position.z,
+        rotation_y_deg: p.rotation_y_deg,
+        qty: p.qty,
+      }))
+      saveLayout(layout)
     } catch (err) {
       setLastResponse(err instanceof Error ? err.message : "Something went wrong")
     } finally {
       setLoading(false)
     }
-  }, [prompt, roomDimensions])
-
-  const handleApplyLayout = useCallback(() => {
-    if (!plan || !catalog.length) return
-    const furniture = plan.placements.map((p, i) =>
-      designPlacementToFurniture(p, catalog, i)
-    )
-    setPlacedFurniture(furniture)
-    const layout: LayoutPlacement[] = plan.placements.map((p) => ({
-      product_id: p.product_id,
-      x: p.position.x,
-      z: p.position.z,
-      rotation_y_deg: p.rotation_y_deg,
-      qty: p.qty,
-    }))
-    saveLayout(layout)
-  }, [plan, catalog])
+  }, [prompt, roomDimensions, placedFurniture, selectedCategory])
 
   const handleAddAllToShoppingList = useCallback(() => {
     if (!plan || !catalog.length) return
@@ -268,6 +305,36 @@ function RoomPageContent() {
     setAddedToCart(true)
   }, [plan, catalog])
 
+  /** Save all currently placed furniture to the shopping list and go to checkout. */
+  const handleCheckout = useCallback(() => {
+    if (!placedFurniture.length) return
+    // Clear previous selection and add all placed items
+    clearSelected()
+    for (const f of placedFurniture) {
+      const productId = extractProductIdFromFurnitureId(f.id)
+      const prod = catalog.find((c) => c.id === productId)
+      if (prod) {
+        addToSelectedWithQty(
+          {
+            id: prod.id,
+            title: prod.title,
+            brand: prod.brand,
+            category: prod.category,
+            image_url: prod.image_url,
+            product_url: prod.product_url,
+            price: prod.price,
+            currency: prod.currency,
+            length_m: prod.length_m,
+            width_m: prod.width_m,
+            height_m: prod.height_m,
+          },
+          1
+        )
+      }
+    }
+    router.push("/plan")
+  }, [placedFurniture, catalog, router])
+
   const handleSelectFurniture = useCallback((id: string | null) => {
     setSelectedFurnitureId(id)
   }, [])
@@ -278,6 +345,23 @@ function RoomPageContent() {
       saveLayout(furnitureToLayoutPlacements(next))
       return next
     })
+  }, [])
+
+  const handleDeleteFurniture = useCallback((id: string) => {
+    setPlacedFurniture((prev) => {
+      const next = prev.filter((f) => f.id !== id)
+  
+      const productId = extractProductIdFromFurnitureId(id)
+      if (productId) {
+        removePlacement(productId)
+      } else {
+        saveLayout(furnitureToLayoutPlacements(next))
+      }
+  
+      return next
+    })
+  
+    setSelectedFurnitureId((prev) => (prev === id ? null : prev))
   }, [])
 
   const handleClearRoom = useCallback(() => {
@@ -314,9 +398,11 @@ function RoomPageContent() {
             placedFurniture={placedFurniture}
             products={catalog}
             debug={searchParams.get("debug") === "1"}
+            sceneView="orbit"
             selectedId={selectedFurnitureId}
             onSelectFurniture={handleSelectFurniture}
             onMoveFurniture={handleMoveFurniture}
+            onDeleteFurniture={handleDeleteFurniture}
             onDropFurniture={() => {}}
             isDragging={false}
             snapshotTrigger={snapshotTrigger}
@@ -397,36 +483,6 @@ function RoomPageContent() {
               </Card>
             )}
 
-            {plan && (
-              <>
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={handleApplyLayout}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                  Apply layout
-                </Button>
-
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={handleAddAllToShoppingList}
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                  Add all to shopping list
-                </Button>
-
-                {addedToCart && (
-                  <Link href="/plan">
-                    <Button className="w-full gap-2">
-                      <ExternalLink className="w-4 h-4" />
-                      Open shopping list
-                    </Button>
-                  </Link>
-                )}
-              </>
-            )}
 
             <Button
               variant="outline"
@@ -468,6 +524,24 @@ function RoomPageContent() {
                 Clear room
               </Button>
             )}
+          </div>
+
+          {/* Checkout button — bottom of sidebar */}
+          <div className="p-4 border-t border-border">
+            <Button
+              className="w-full gap-2"
+              size="lg"
+              onClick={handleCheckout}
+              disabled={placedFurniture.length === 0}
+            >
+              <ShoppingCart className="w-4 h-4" />
+              Checkout
+              {placedFurniture.length > 0 && (
+                <span className="ml-2 bg-primary-foreground/20 text-primary-foreground text-xs px-2 py-0.5 rounded-full">
+                  {placedFurniture.length} items
+                </span>
+              )}
+            </Button>
           </div>
         </aside>
       </div>

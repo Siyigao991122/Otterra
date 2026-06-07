@@ -11,12 +11,49 @@ import type {
   FloorplanGeometry,
   InteriorWallSanitizeStats,
 } from "@/lib/types"
-import { rectangleFootprintFromAABB } from "@/lib/floorplanGeometry"
+import { isValidFootprintPolygon, polygonAABB, rectangleFootprintFromAABB } from "@/lib/floorplanGeometry"
 
 export const maxDuration = 90
 
 /** Chat Completions vision model (logged for debugging). */
-const OPENAI_VISION_MODEL = "gpt-4o"
+const OPENAI_VISION_MODEL = "gpt-5.5"
+
+export type ScaleDetectionMethod = "dimension_line" | "ratio" | "scale_bar" | "failed"
+
+export interface ScaleDetectionResult {
+  method: ScaleDetectionMethod
+  totalWidthMeters: number
+  totalDepthMeters: number
+  confidence: number
+  notes: string
+}
+
+const SCALE_DETECTION_PROMPT = `You are analyzing a floor plan image to extract its real-world scale.
+
+Look carefully for ANY of these:
+1. Dimension lines with numbers (e.g. "3800", "12'-6\"", "3.8m", "15 ft")
+2. Scale ratios printed on the plan (e.g. "1:100", "1/4\" = 1'-0\"", "Scale 1:50")
+3. Scale bars (a graphic bar labeled with a length)
+
+From whatever you find, estimate the TOTAL real-world width and height of the entire drawn floor plan area in meters.
+
+Return ONLY a JSON object:
+{
+  "method": "dimension_line" | "ratio" | "scale_bar" | "failed",
+  "totalWidthMeters": <number>,
+  "totalDepthMeters": <number>,
+  "confidence": <0.0 to 1.0>,
+  "notes": "<brief description of what you found>"
+}
+
+Unit conversion rules:
+- millimeters: divide by 1000
+- centimeters: divide by 100
+- feet: multiply by 0.3048
+- inches: multiply by 0.0254
+- "1:100" scale means 1 drawing unit = 100 real units (so 1mm on paper = 100mm real)
+
+Use "failed" only if there are absolutely no scale references visible anywhere on the image.`
 
 type ImageInputMeta = {
   sourceType: "base64" | "http_url" | "other"
@@ -99,11 +136,21 @@ function mergeAnalysis(
   const rooms: FloorPlanAnalysis["rooms"] = Array.isArray(roomsRaw)
     ? roomsRaw.map((r, i) => {
         const o = r && typeof r === "object" ? (r as Record<string, unknown>) : {}
+        const dimensionText = typeof o.dimensionText === "string" && o.dimensionText.trim()
+          ? o.dimensionText.trim()
+          : undefined
+        const dimensionsFromOCR = o.dimensionsFromOCR === true
+        const cx = Number.isFinite(Number(o.cx)) ? Number(o.cx) : undefined
+        const cy = Number.isFinite(Number(o.cy)) ? Number(o.cy) : undefined
         return {
           name: typeof o.name === "string" ? o.name : `Room ${i + 1}`,
           widthMeters: Number(o.widthMeters) || 4,
           depthMeters: Number(o.depthMeters) || 4,
           heightMeters: Number(o.heightMeters) || 2.7,
+          ...(cx != null ? { cx } : {}),
+          ...(cy != null ? { cy } : {}),
+          ...(dimensionText ? { dimensionText } : {}),
+          ...(dimensionsFromOCR ? { dimensionsFromOCR } : {}),
         }
       })
     : [{ name: "Living Area", widthMeters: 4, depthMeters: 4, heightMeters: 2.7 }]
@@ -177,23 +224,134 @@ function footprintDebugAfterMerge(
   }
 }
 
-const VISION_SYSTEM = `You are an architectural assistant analyzing a floor plan image (possibly rasterized from PDF).
+const VISION_SYSTEM = `You are an architectural assistant extracting the geometry of a floor plan image.
+
+Use NORMALIZED coordinates: x=0.0 is the LEFT edge of the image, x=1.0 is the RIGHT edge, y=0.0 is the TOP edge, y=1.0 is the BOTTOM edge. All polygon and wall coordinates must be in this 0.0–1.0 range.
 
 Return a single JSON object with:
-- rooms: array of { name, widthMeters, depthMeters, heightMeters } for major spaces (meters).
-- totalWidthMeters, totalDepthMeters, totalAreaSqMeters for the whole drawn unit or primary wing.
-- notes: short summary including measurement assumptions.
-- footprintPolygonMeters: array of {x, y} vertices tracing the OUTER EXTERIOR boundary of the full residential unit (or the drawn suite), in METERS, in a single consistent plan coordinate system BEFORE centering (we will center in code). This must follow the real outside shell of the unit — not the interior room partition lines, and not an axis-aligned bounding box around the unit.
-  CRITICAL — do not oversimplify: unless the true exterior is genuinely a perfect rectangle, do NOT approximate the outline as only four corners. Preserve every significant exterior corner, notch, recess, bay, jog, and protrusion you can see (even if it means a few more points). Prefer about 6–12 vertices for typical condo / apartment footprints with jogs or cut-outs; use fewer only when the exterior is visibly a simple rectangle. Simplify mildly if needed (omit tiny decorative bumps) but keep the overall silhouette faithful.
-  Order vertices counter-clockwise around the closed loop. x = horizontal on page, y = vertical on page (these map to 3D X and Z with Y up). Do not duplicate the first point at the end. Use plausible metric coordinates consistent with labeled dimensions on the sheet; convert feet/inches to meters (1 ft = 0.3048 m).
-  Only output exactly four corners if the visible exterior boundary is actually a simple quadrilateral with no meaningful recesses or extra corners along the outer wall.
-- interiorWallsMeters (strongly recommended): array of segments { id?, x1, y1, x2, y2, thickness? } for MAJOR interior PARTITION walls that separate rooms (not exterior, not furniture, not cabinets/islands, not thin fixture lines). Use the EXACT same plan coordinate system and METERS scale as footprintPolygonMeters (same origin and axis directions: x = horizontal on sheet, y = vertical on sheet before we center in code). Each segment is a straight wall centerline from (x1,y1) to (x2,y2); omit thickness or set ~0.10–0.20 m if unsure (we default ~0.12 m). Trace every load-bearing or clear drywall partition that defines room boundaries; ignore rugs, sofas, tables, and tiny decorative edges. If a wall steps, use one segment per straight run. Prefer completeness of major dividers over omitting lines — this powers a 3D layout view.
-- confidence: 0-1 how sure you are in the geometry.
+- rooms: array of { name, widthMeters, depthMeters, heightMeters, cx, cy, dimensionText?, dimensionsFromOCR? }
+  * name: room name (e.g. "Living Room", "Master Bedroom", "Kitchen")
+  * widthMeters, depthMeters, heightMeters: real dimensions in meters
+  * cx, cy: NORMALIZED 0–1 centre of this room on the image (e.g. cx=0.7, cy=0.3 means upper-right area)
+  * dimensionText: the EXACT dimension text printed on the plan for this room, e.g. "14'6\" × 20'5\"" or "4.2m × 3.8m". Leave out if no text found.
+  * dimensionsFromOCR: true if dimensionText was read from the plan, false if you estimated visually.
+  * PRIORITY: If you can read dimension text on the plan (e.g. "12'-2\" × 12'-2\""), use those values — they are more accurate than visual estimates. Convert feet/inches to meters (1ft = 0.3048m).
+- totalWidthMeters, totalDepthMeters, totalAreaSqMeters — your best estimate of the whole unit in meters.
+- notes: short summary.
+- footprintPolygon: array of {x, y} vertices (normalized 0–1) tracing the OUTER EXTERIOR boundary of the full unit. Rules:
+  * Follow the true outer wall shell — not interior partitions, not a bounding box.
+  * NEVER output just 4 corners unless the floor plan is literally a perfect rectangle with zero notches.
+  * Capture every L-shape, bay, recess, jog, setback along the exterior (aim for 6–20 vertices for a typical apartment).
+  * Order counter-clockwise. Do not repeat the first point at the end.
+- interiorWalls: array of { id?, x1, y1, x2, y2, thickness? } — MAJOR partition walls only (not furniture, not cabinets). All coordinates normalized 0–1. thickness in meters (default ~0.12 if unknown).
+- confidence: 0–1 how confident you are in the geometry.`
 
-Convert feet/inches to meters (1 ft = 0.3048 m). If labels are illegible, estimate from proportions and state that in notes.`
+async function detectFloorplanScale(imageUrl: string, apiKey: string): Promise<ScaleDetectionResult> {
+  const fallback: ScaleDetectionResult = {
+    method: "failed",
+    totalWidthMeters: 0,
+    totalDepthMeters: 0,
+    confidence: 0,
+    notes: "Scale detection failed or not attempted",
+  }
+  try {
+    const payload = JSON.stringify({
+      model: OPENAI_VISION_MODEL,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: SCALE_DETECTION_PROMPT },
+            { type: "image_url", image_url: { url: imageUrl } },
+          ],
+        },
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 512,
+      temperature: 0.1,
+    })
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: payload,
+    })
+    if (!res.ok) return fallback
+    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
+    const raw = data.choices?.[0]?.message?.content
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw) as Partial<ScaleDetectionResult>
+    const method = parsed.method ?? "failed"
+    const w = Number(parsed.totalWidthMeters)
+    const d = Number(parsed.totalDepthMeters)
+    if (method === "failed" || !Number.isFinite(w) || w <= 0 || !Number.isFinite(d) || d <= 0) {
+      return { ...fallback, method: "failed", notes: parsed.notes ?? fallback.notes }
+    }
+    return {
+      method,
+      totalWidthMeters: w,
+      totalDepthMeters: d,
+      confidence: Number.isFinite(Number(parsed.confidence)) ? Number(parsed.confidence) : 0.5,
+      notes: parsed.notes ?? "",
+    }
+  } catch {
+    return fallback
+  }
+}
+
+/** Detect whether GPT-4o returned normalized 0–1 coords or metric coords directly. */
+function isNormalizedPolygon(points: unknown[]): boolean {
+  let maxVal = 0
+  for (const p of points) {
+    if (!p || typeof p !== "object") continue
+    const o = p as Record<string, unknown>
+    maxVal = Math.max(maxVal, Math.abs(Number(o.x) || 0), Math.abs(Number(o.y) || 0))
+  }
+  return maxVal <= 1.5
+}
+
+/** Multiply normalized 0–1 coords by real-world dimensions to get metres; pass through if model already returned metric coords. */
+function applyScaleToNormalizedGeometry(
+  parsed: Record<string, unknown>,
+  totalWidthMeters: number,
+  totalDepthMeters: number
+): Record<string, unknown> {
+  const polygon = Array.isArray(parsed.footprintPolygon) ? parsed.footprintPolygon : null
+  const walls = Array.isArray(parsed.interiorWalls) ? parsed.interiorWalls : null
+
+  if (!polygon || !isNormalizedPolygon(polygon)) {
+    console.log("[analyze-floorplan] model returned metric coords — skipping normalization multiply")
+    return {
+      ...parsed,
+      footprintPolygonMeters: polygon ?? parsed.footprintPolygonMeters,
+      interiorWallsMeters: walls ?? parsed.interiorWallsMeters,
+    }
+  }
+
+  const scalePoint = (p: unknown): unknown => {
+    if (!p || typeof p !== "object") return p
+    const o = p as Record<string, unknown>
+    return { ...o, x: Number(o.x) * totalWidthMeters, y: Number(o.y) * totalDepthMeters }
+  }
+  const scaleSegment = (s: unknown): unknown => {
+    if (!s || typeof s !== "object") return s
+    const o = s as Record<string, unknown>
+    return {
+      ...o,
+      x1: Number(o.x1) * totalWidthMeters,
+      y1: Number(o.y1) * totalDepthMeters,
+      x2: Number(o.x2) * totalWidthMeters,
+      y2: Number(o.y2) * totalDepthMeters,
+    }
+  }
+  return {
+    ...parsed,
+    footprintPolygonMeters: polygon.map(scalePoint),
+    interiorWallsMeters: walls ? walls.map(scaleSegment) : parsed.interiorWallsMeters,
+  }
+}
 
 export async function POST(req: Request) {
-  let body: { images?: string[] }
+  let body: { images?: string[]; pdfBase64?: string; sourceFileName?: string }
   try {
     body = await req.json()
   } catch {
@@ -207,6 +365,7 @@ export async function POST(req: Request) {
 
   const apiKey = process.env.OPENAI_API_KEY?.trim()
   const firstImage = images[0]
+  const pdfBase64 = typeof body.pdfBase64 === "string" && body.pdfBase64.trim() ? body.pdfBase64.trim() : null
   if (!firstImage || typeof firstImage !== "string") {
     return NextResponse.json({ error: "Invalid image entry." }, { status: 400 })
   }
@@ -274,29 +433,16 @@ export async function POST(req: Request) {
     }
   }
 
-  const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
-    { type: "text", text: userVisionText },
-    { type: "image_url", image_url: { url: imageUrlForOpenAI } },
-  ]
-
   const imageMeta = describeImageInput(imageUrlForOpenAI)
   const payloadJson = buildOpenAiPayloadJson(imageUrlForOpenAI)
-  const payloadBytes = Buffer.byteLength(payloadJson, "utf8")
 
-  console.log("[analyze-floorplan] using real OpenAI analysis", {
+  // Run scale detection in parallel with geometry extraction
+  const scaleDetectionPromise = detectFloorplanScale(imageUrlForOpenAI, apiKey)
+
+  console.log("[analyze-floorplan] starting parallel scale detection + geometry extraction", {
     model: OPENAI_VISION_MODEL,
-    payloadBytes,
-    hasImage: contentParts.some((p) => p.type === "image_url"),
     imageSourceType: imageMeta.sourceType,
-    imageMime: imageMeta.mime ?? null,
-    renderedImagePx: imageMeta.renderedPx ?? null,
   })
-  if (imageMeta.sourceType === "base64") {
-    console.log("[analyze-floorplan] debug image payload size", {
-      base64CharLength: imageMeta.base64PayloadCharLength ?? 0,
-      requestJsonUtf8Bytes: payloadBytes,
-    })
-  }
 
   try {
     let res: Response
@@ -414,11 +560,35 @@ export async function POST(req: Request) {
       )
     }
 
-    const modelRawVertices = countRawModelFootprintVertices(parsed)
+    // Wait for scale detection result (runs in parallel with the above fetch)
+    const scaleResult = await scaleDetectionPromise
+
+    // Convert normalized 0–1 polygon coords → real meters using detected scale.
+    // Fall back to GPT-4o's own totalWidth/Depth estimate when scale detection failed.
+    const effectiveWidth =
+      scaleResult.method !== "failed" && scaleResult.confidence >= 0.5
+        ? scaleResult.totalWidthMeters
+        : Number(parsed.totalWidthMeters) || 6
+    const effectiveDepth =
+      scaleResult.method !== "failed" && scaleResult.confidence >= 0.5
+        ? scaleResult.totalDepthMeters
+        : Number(parsed.totalDepthMeters) || 6
+
+    const scaledParsed = applyScaleToNormalizedGeometry(parsed, effectiveWidth, effectiveDepth)
+
+    const modelRawVertices = countRawModelFootprintVertices(scaledParsed)
     const { floorPlan, interiorWallStats, usedFallbackRectangle } = mergeAnalysis(
-      parsed,
+      scaledParsed,
       "Analyzed from uploaded floor plan."
     )
+
+    // Override totals with scale detection when available
+    if (scaleResult.method !== "failed" && scaleResult.confidence >= 0.5) {
+      floorPlan.totalWidthMeters = effectiveWidth
+      floorPlan.totalDepthMeters = effectiveDepth
+      floorPlan.totalAreaSqMeters = effectiveWidth * effectiveDepth
+    }
+
     const footprintDbg = footprintDebugAfterMerge(
       floorPlan,
       modelRawVertices,
@@ -427,38 +597,22 @@ export async function POST(req: Request) {
     )
     floorPlan._debugFloorplanGeometry = footprintDbg
 
-    // TEMPORARY: if we detect many rooms but the model only returned a quad footprint, footprint may be a loose bbox.
-    const COMPLEX_UNIT_ROOM_THRESHOLD = 4
-    if (
-      floorPlan.geometry &&
-      !footprintDbg.usedFallbackRectangle &&
-      modelRawVertices === 4 &&
-      floorPlan.rooms.length >= COMPLEX_UNIT_ROOM_THRESHOLD
-    ) {
-      const prev = floorPlan.geometry.confidence ?? 0.75
-      floorPlan.geometry.confidence = Math.min(prev, 0.42)
-      console.warn("[analyze-floorplan] footprint sanity: many rooms but model footprint is only 4 vertices — capped confidence", {
-        roomCount: floorPlan.rooms.length,
-        modelRawFootprintVertexCount: modelRawVertices,
-        confidence: floorPlan.geometry.confidence,
-      })
-    }
-
-    console.log("[analyze-floorplan] footprint geometry (debug)", {
+    console.log("[analyze-floorplan] scale detection + geometry result", {
+      scaleMethod: scaleResult.method,
+      scaleConfidence: scaleResult.confidence,
+      scaleNotes: scaleResult.notes,
+      effectiveWidth,
+      effectiveDepth,
       footprintPointCount: footprintDbg.footprintPointCount,
       geometryType: footprintDbg.geometryType,
       usedFallbackRectangle: footprintDbg.usedFallbackRectangle,
-      modelRawFootprintVertexCount: footprintDbg.modelRawFootprintVertexCount,
-      modelReturnedExactlyFourFootprintPoints: footprintDbg.modelReturnedExactlyFourFootprintPoints,
-      interiorWalls: footprintDbg.interiorWalls,
+      footprintSample: floorPlan.geometry?.footprintPolygon?.slice(0, 4),
     })
 
-    // Do not copy footprint AABB width/depth onto any `rooms[i]`: the outer polygon often
-    // spans the whole unit, while each room has its own model-extracted dimensions. Overwriting
-    // rooms[0] made the first card show entire-floor size (e.g. ~3000 sq ft “Primary Bedroom”).
-    // Unit-level totals stay as returned by mergeAnalysis from the model (totalWidthMeters, etc.).
-
-    return NextResponse.json({ floorPlan })
+    return NextResponse.json({
+      floorPlan,
+      scaleDetection: scaleResult,
+    })
   } catch (e) {
     console.error("[analyze-floorplan]", e)
     return NextResponse.json(

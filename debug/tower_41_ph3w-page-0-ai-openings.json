@@ -1,0 +1,60 @@
+{
+  "pageIndex": 0,
+  "candidates": [
+    {
+      "kind": "door",
+      "confidence": 0.9,
+      "notes": "Door with swing arc near the center of the plan.",
+      "renderBox": {
+        "x": 800,
+        "y": 200,
+        "width": 40,
+        "height": 80
+      },
+      "pdfBox": {
+        "minX": 400,
+        "minY": 100,
+        "maxX": 420,
+        "maxY": 140
+      }
+    },
+    {
+      "kind": "window",
+      "confidence": 0.85,
+      "notes": "Window on the upper left side of the plan.",
+      "renderBox": {
+        "x": 600,
+        "y": 100,
+        "width": 60,
+        "height": 10
+      },
+      "pdfBox": {
+        "minX": 300,
+        "minY": 50,
+        "maxX": 330,
+        "maxY": 55
+      }
+    },
+    {
+      "kind": "window",
+      "confidence": 0.8,
+      "notes": "Window on the right side of the plan.",
+      "renderBox": {
+        "x": 1100,
+        "y": 300,
+        "width": 50,
+        "height": 10
+      },
+      "pdfBox": {
+        "minX": 550,
+        "minY": 150,
+        "maxX": 575,
+        "maxY": 155
+      }
+    }
+  ],
+  "notes": [
+    "Detected doors and windows are based on typical architectural symbols.",
+    "Coordinates are approximate and based on visible features."
+  ]
+}

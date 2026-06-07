@@ -20,7 +20,13 @@ import {
 import { Canvas, useThree, useFrame } from "@react-three/fiber"
 import { OrbitControls, Grid, Environment, Html, PerspectiveCamera, Billboard } from "@react-three/drei"
 import * as THREE from "three"
-import type { FloorplanPoint2D, FloorplanWallSegment, Furniture, RoomDimensions } from "@/lib/types"
+import type {
+  FloorplanDoorOpening,
+  FloorplanPoint2D,
+  FloorplanWallSegment,
+  Furniture,
+  RoomDimensions,
+} from "@/lib/types"
 import { isValidFootprintPolygon, polygonAABB } from "@/lib/floorplanGeometry"
 import { extractProductIdFromFurnitureId } from "@/lib/extractProductIdFromFurnitureId"
 import type { ProductModelLifecycle } from "@/lib/productModelLifecycle"
@@ -77,7 +83,7 @@ class HdriEnvironmentErrorBoundary extends Component<
 }
 
 /** Set false to silence temporary state-loop diagnostics. */
-const ROOM_SCENE_DEBUG_STATE = true
+const ROOM_SCENE_DEBUG_STATE = false
 
 function logRoomSceneState(name: string, reason: string, keptPrev: boolean) {
   if (!ROOM_SCENE_DEBUG_STATE) return
@@ -111,6 +117,7 @@ interface Room3DSceneProps {
   selectedId: string | null
   onSelectFurniture: (id: string | null) => void
   onMoveFurniture: (id: string, position: [number, number, number]) => void
+  onDeleteFurniture: (id: string) => void
   onDropFurniture: (position: [number, number, number]) => void
   isDragging: boolean
   snapshotTrigger?: number
@@ -136,6 +143,81 @@ function resolveSceneView(dimensions: RoomDimensions, explicit?: RoomSceneView):
   if (explicit) return explicit
   const fp = dimensions.geometry?.footprintPolygon
   return fp && isValidFootprintPolygon(fp) ? "plan" : "orbit"
+}
+
+function orient2d(ax: number, az: number, bx: number, bz: number, cx: number, cz: number): number {
+  return (bx - ax) * (cz - az) - (bz - az) * (cx - ax)
+}
+
+function onSegment2d(ax: number, az: number, bx: number, bz: number, px: number, pz: number): boolean {
+  return (
+    px >= Math.min(ax, bx) - 1e-6 &&
+    px <= Math.max(ax, bx) + 1e-6 &&
+    pz >= Math.min(az, bz) - 1e-6 &&
+    pz <= Math.max(az, bz) + 1e-6
+  )
+}
+
+function segmentsIntersect2d(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  cx: number,
+  cz: number,
+  dx: number,
+  dz: number
+): boolean {
+  const o1 = orient2d(ax, az, bx, bz, cx, cz)
+  const o2 = orient2d(ax, az, bx, bz, dx, dz)
+  const o3 = orient2d(cx, cz, dx, dz, ax, az)
+  const o4 = orient2d(cx, cz, dx, dz, bx, bz)
+
+  if ((o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0)) return true
+  if (Math.abs(o1) <= 1e-6 && onSegment2d(ax, az, bx, bz, cx, cz)) return true
+  if (Math.abs(o2) <= 1e-6 && onSegment2d(ax, az, bx, bz, dx, dz)) return true
+  if (Math.abs(o3) <= 1e-6 && onSegment2d(cx, cz, dx, dz, ax, az)) return true
+  if (Math.abs(o4) <= 1e-6 && onSegment2d(cx, cz, dx, dz, bx, bz)) return true
+  return false
+}
+
+function pathCrossesInteriorWall(
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  walls: FloorplanWallSegment[] | undefined
+): boolean {
+  if (!walls?.length) return false
+  // Walls live in plan (x,y); world z corresponds to -plan y (see planYToWorldZ).
+  return walls.some((w) =>
+    segmentsIntersect2d(fromX, -fromZ, toX, -toZ, w.x1, w.y1, w.x2, w.y2)
+  )
+}
+
+function constrainPointAgainstInteriorWalls(
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  walls: FloorplanWallSegment[] | undefined
+): { x: number; z: number } {
+  if (!pathCrossesInteriorWall(fromX, fromZ, toX, toZ, walls)) {
+    return { x: toX, z: toZ }
+  }
+
+  let bestX = fromX
+  let bestZ = fromZ
+  const steps = 24
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps
+    const x = fromX + (toX - fromX) * t
+    const z = fromZ + (toZ - fromZ) * t
+    if (pathCrossesInteriorWall(fromX, fromZ, x, z, walls)) break
+    bestX = x
+    bestZ = z
+  }
+  return { x: bestX, z: bestZ }
 }
 
 type OrbitControlsHandle = ComponentRef<typeof OrbitControls>
@@ -169,9 +251,10 @@ function ApartmentSceneControls({
       cam.near = Math.max(0.05, H / 2000)
       cam.far = Math.max(400, H * 10)
     } else {
-      cam.position.set(8, 8, 8)
+      const orbitDistance = Math.max(8, span * 1.35)
+      cam.position.set(orbitDistance * 0.9, orbitDistance * 0.72, orbitDistance * 0.9)
       cam.near = 0.1
-      cam.far = 200
+      cam.far = Math.max(300, span * 18)
     }
     cam.up.set(0, 1, 0)
     cam.lookAt(0, 0, 0)
@@ -190,12 +273,14 @@ function ApartmentSceneControls({
         oc.minDistance = Math.max(2.5, H * 0.18)
         oc.maxDistance = Math.max(60, H * 9)
       } else {
+        const orbitMinDistance = Math.max(3, span * 0.2)
+        const orbitMaxDistance = Math.max(40, span * 8)
         oc.minPolarAngle = 0
         oc.maxPolarAngle = Math.PI / 2 - 0.1
         oc.minAzimuthAngle = -Infinity
         oc.maxAzimuthAngle = Infinity
-        oc.minDistance = 3
-        oc.maxDistance = 20
+        oc.minDistance = orbitMinDistance
+        oc.maxDistance = orbitMaxDistance
       }
       oc.update()
       return true
@@ -219,137 +304,217 @@ function ApartmentSceneControls({
       keyPanSpeed={20}
       minPolarAngle={isPlan ? 0 : 0}
       maxPolarAngle={isPlan ? 0.12 : Math.PI / 2 - 0.1}
-      minDistance={isPlan ? 2.5 : 3}
-      maxDistance={isPlan ? 800 : 20}
+      minDistance={isPlan ? 2.5 : Math.max(3, footprintSpanMeters(roomDimensions) * 0.2)}
+      maxDistance={isPlan ? 800 : Math.max(40, footprintSpanMeters(roomDimensions) * 8)}
     />
   )
 }
 
 const POLYGON_WALL_THICKNESS_EXTERIOR = 0.1
 const POLYGON_WALL_THICKNESS_INTERIOR_DEFAULT = 0.07
+const ROOM_WALL_EXTRA_HEIGHT_M = 0.28
+const DOOR_FRAME_BAR_THICKNESS_M = 0.04
+const DOOR_FRAME_DEPTH_M = 0.014
+const DOOR_FRAME_SURFACE_OFFSET_M = 0.01
+
+/** Map plan depth (y, “up” on the 2D footprint preview) to world Z under the Y-up overhead camera (+Z reads screen-down). */
+function planYToWorldZ(planY: number): number {
+  return -planY
+}
+
+
+function polygonCentroidXZ(footprint: FloorplanPoint2D[]): [number, number] {
+  let a = 0
+  let cx = 0
+  let cz = 0
+  const n = footprint.length
+  for (let i = 0; i < n; i++) {
+    const p0 = footprint[i]
+    const p1 = footprint[(i + 1) % n]
+    const cross = p0.x * p1.y - p1.x * p0.y
+    a += cross
+    cx += (p0.x + p1.x) * cross
+    cz += (p0.y + p1.y) * cross
+  }
+  if (Math.abs(a) < 1e-8) {
+    let sx = 0
+    let sz = 0
+    for (const p of footprint) {
+      sx += p.x
+      sz += p.y
+    }
+    return [sx / n, sz / n]
+  }
+  a *= 0.5
+  return [cx / (6 * a), cz / (6 * a)]
+}
 
 /**
- * Extruded shell from 2D footprint (plan x → world X, plan y → world Z).
- * TODO: clip wall segments at door/window openings; align thickness to CAD when available.
+// ─────────────────────────────────────────────────────────────────────────────
+// Fixture appearance config
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Extruded shell from 2D footprint (plan x → world X, plan y maps to −world Z for consistent plan vs preview).
  */
 function PolygonRoomShell({
   footprint,
   wallHeight,
-  interiorWalls,
+  wallPolygons,
+  doorOpenings,
+  exteriorWallOpacity,
+  interiorWallOpacity,
 }: {
   footprint: FloorplanPoint2D[]
   wallHeight: number
-  interiorWalls?: FloorplanWallSegment[]
+  wallPolygons?: FloorplanPoint2D[][]
+  doorOpenings?: FloorplanDoorOpening[]
+  exteriorWallOpacity: number
+  interiorWallOpacity: number
 }) {
   const exteriorMat = useMemo(
-    () => ({ color: "#cfd6df", roughness: 0.48, metalness: 0.04 } as const),
+    () => ({ color: "#f8f9fb", roughness: 0.52, metalness: 0.03 } as const),
     []
   )
   const interiorMat = useMemo(
-    () => ({ color: "#b8c0cc", roughness: 0.5, metalness: 0.05 } as const),
+    () => ({ color: "#fafbfc", roughness: 0.54, metalness: 0.02 } as const),
     []
   )
   const floorMat = useMemo(
-    () => ({ color: "#dce0e6", roughness: 0.62, metalness: 0.04 } as const),
+    () => ({ color: "#2a3038", roughness: 0.78, metalness: 0.04 } as const),
     []
   )
   const floorGeo = useMemo(() => {
     const shape = new THREE.Shape()
-    shape.moveTo(footprint[0].x, -footprint[0].y)
+    shape.moveTo(footprint[0].x, footprint[0].y)
     for (let i = 1; i < footprint.length; i++) {
-      shape.lineTo(footprint[i].x, -footprint[i].y)
+      shape.lineTo(footprint[i].x, footprint[i].y)
     }
     shape.closePath()
     return new THREE.ShapeGeometry(shape)
   }, [footprint])
 
-  const wallElements = useMemo(() => {
+  const doorFrameMat = useMemo(
+    () => ({ color: "#6f5d4e", roughness: 0.58, metalness: 0.04 } as const),
+    []
+  )
+
+  // Build extruded geometries from wall-region polygons (pixel-accurate shapes)
+  const wallPolyGeos = useMemo(() => {
+    if (!wallPolygons || wallPolygons.length === 0) return []
+    return wallPolygons.flatMap(poly => {
+      if (poly.length < 3) return []
+      const shape = new THREE.Shape()
+      shape.moveTo(poly[0].x, poly[0].y)
+      for (let i = 1; i < poly.length; i++) shape.lineTo(poly[i].x, poly[i].y)
+      shape.closePath()
+      return [new THREE.ExtrudeGeometry(shape, { depth: wallHeight, bevelEnabled: false })]
+    })
+  }, [wallPolygons, wallHeight])
+
+
+  const doorElements = useMemo(() => {
     const out: ReactNode[] = []
-    const n = footprint.length
-    for (let i = 0; i < n; i++) {
-      const a = footprint[i]
-      const b = footprint[(i + 1) % n]
-      const ax = a.x
-      const az = a.y
-      const bx = b.x
-      const bz = b.y
-      const dx = bx - ax
-      const dz = bz - az
-      const len = Math.hypot(dx, dz)
-      if (len < 1e-6) continue
-      const midx = (ax + bx) / 2
-      const midz = (az + bz) / 2
-      const dir = new THREE.Vector3(dx / len, 0, dz / len)
+    for (const door of doorOpenings ?? []) {
+      const dx = door.x2 - door.x1
+      const dzPlan = door.y2 - door.y1
+      const width = Math.hypot(dx, dzPlan)
+      if (width < 0.2) continue
+
+      const doorHeight = Math.min(Math.max(door.height ?? 2.05, 1.8), Math.max(1.85, wallHeight - 0.08))
+      const midx = (door.x1 + door.x2) / 2
+      const midz = planYToWorldZ((door.y1 + door.y2) / 2)
+      const dzWorld = planYToWorldZ(door.y2) - planYToWorldZ(door.y1)
+      const dir = new THREE.Vector3(dx / width, 0, dzWorld / width)
       const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir)
+      const outlineOpacity = Math.max(0.3, interiorWallOpacity)
+
       out.push(
-        <group key={`perim-${i}`} position={[midx, wallHeight / 2, midz]} quaternion={q}>
-          <mesh receiveShadow castShadow>
-            <boxGeometry args={[len, wallHeight, POLYGON_WALL_THICKNESS_EXTERIOR]} />
-            <meshStandardMaterial {...exteriorMat} />
+        <group
+          key={`door-${door.id}`}
+          position={[midx, doorHeight / 2, midz]}
+          quaternion={q}
+        >
+          <mesh position={[-width / 2, 0, DOOR_FRAME_SURFACE_OFFSET_M]} castShadow>
+            <boxGeometry args={[DOOR_FRAME_BAR_THICKNESS_M, doorHeight, DOOR_FRAME_DEPTH_M]} />
+            <meshStandardMaterial
+              {...doorFrameMat}
+              transparent
+              opacity={outlineOpacity}
+              depthWrite={outlineOpacity > 0.45}
+            />
           </mesh>
-        </group>
-      )
-    }
-    let iw = 0
-    for (const w of interiorWalls ?? []) {
-      const ax = w.x1
-      const az = w.y1
-      const bx = w.x2
-      const bz = w.y2
-      const dx = bx - ax
-      const dz = bz - az
-      const len = Math.hypot(dx, dz)
-      if (len < 1e-6) continue
-      const midx = (ax + bx) / 2
-      const midz = (az + bz) / 2
-      const dir = new THREE.Vector3(dx / len, 0, dz / len)
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir)
-      const t = Math.max(w.thickness ?? POLYGON_WALL_THICKNESS_INTERIOR_DEFAULT, 0.04)
-      out.push(
-        <group key={`int-${w.id}-${iw++}`} position={[midx, wallHeight / 2, midz]} quaternion={q}>
-          <mesh receiveShadow castShadow>
-            <boxGeometry args={[len, wallHeight, t]} />
-            <meshStandardMaterial {...interiorMat} />
+          <mesh position={[width / 2, 0, DOOR_FRAME_SURFACE_OFFSET_M]} castShadow>
+            <boxGeometry args={[DOOR_FRAME_BAR_THICKNESS_M, doorHeight, DOOR_FRAME_DEPTH_M]} />
+            <meshStandardMaterial
+              {...doorFrameMat}
+              transparent
+              opacity={outlineOpacity}
+              depthWrite={outlineOpacity > 0.45}
+            />
+          </mesh>
+          <mesh position={[0, doorHeight / 2, DOOR_FRAME_SURFACE_OFFSET_M]} castShadow>
+            <boxGeometry args={[width + DOOR_FRAME_BAR_THICKNESS_M, DOOR_FRAME_BAR_THICKNESS_M, DOOR_FRAME_DEPTH_M]} />
+            <meshStandardMaterial
+              {...doorFrameMat}
+              transparent
+              opacity={outlineOpacity}
+              depthWrite={outlineOpacity > 0.45}
+            />
           </mesh>
         </group>
       )
     }
     return out
-  }, [footprint, wallHeight, interiorWalls, exteriorMat, interiorMat])
+  }, [doorFrameMat, doorOpenings, interiorWallOpacity, wallHeight])
 
   return (
     <group>
       <mesh geometry={floorGeo} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <meshStandardMaterial {...floorMat} side={THREE.DoubleSide} />
       </mesh>
-      {wallElements}
+      {wallPolyGeos.map((geo, i) => (
+        <mesh key={i} geometry={geo} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]} castShadow receiveShadow>
+          <meshStandardMaterial
+            {...interiorMat}
+            transparent
+            opacity={interiorWallOpacity}
+            depthWrite={interiorWallOpacity > 0.35}
+            side={THREE.FrontSide}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
+        </mesh>
+      ))}
+      {doorElements}
     </group>
   )
 }
 
-function RectangularRoom({ dimensions }: { dimensions: RoomDimensions }) {
-  const { width, depth, height } = dimensions
+function RectangularRoom({ dimensions, wallOpacity }: { dimensions: RoomDimensions, wallOpacity: number }) {
+  const { width, depth } = dimensions
+  const height = dimensions.height + ROOM_WALL_EXTRA_HEIGHT_M
 
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[width, depth]} />
-        <meshStandardMaterial color="#e8e8ec" roughness={0.6} metalness={0.05} />
+        <meshStandardMaterial color="#2a3038" roughness={0.78} metalness={0.04} />
       </mesh>
 
       <mesh position={[0, height / 2, -depth / 2]} receiveShadow>
         <planeGeometry args={[width, height]} />
-        <meshStandardMaterial color="#f5f5f7" roughness={0.5} metalness={0} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#f8f9fb" roughness={0.52} metalness={0.02} side={THREE.DoubleSide} transparent opacity={wallOpacity} depthWrite={wallOpacity > 0.35} />
       </mesh>
 
       <mesh position={[-width / 2, height / 2, 0]} rotation={[0, Math.PI / 2, 0]} receiveShadow>
         <planeGeometry args={[depth, height]} />
-        <meshStandardMaterial color="#f0f0f2" roughness={0.5} metalness={0} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#f6f7f9" roughness={0.52} metalness={0.02} side={THREE.DoubleSide} transparent opacity={wallOpacity} depthWrite={wallOpacity > 0.35} />
       </mesh>
 
       <mesh position={[width / 2, height / 2, 0]} rotation={[0, -Math.PI / 2, 0]} receiveShadow>
         <planeGeometry args={[depth, height]} />
-        <meshStandardMaterial color="#f0f0f2" roughness={0.5} metalness={0} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#f6f7f9" roughness={0.52} metalness={0.02} side={THREE.DoubleSide} transparent opacity={wallOpacity} depthWrite={wallOpacity > 0.35} />
       </mesh>
     </group>
   )
@@ -357,16 +522,57 @@ function RectangularRoom({ dimensions }: { dimensions: RoomDimensions }) {
 
 function Room({ dimensions }: { dimensions: RoomDimensions }) {
   const fp = dimensions.geometry?.footprintPolygon
+  const { camera } = useThree()
+  const wallHeight = dimensions.height + ROOM_WALL_EXTRA_HEIGHT_M
+
+  const [exteriorWallOpacity, setExteriorWallOpacity] = useState(1)
+  const opacityRef = useRef(1)
+  const dirRef = useRef(new THREE.Vector3())
+
+  useFrame(() => {
+    camera.getWorldDirection(dirRef.current)
+
+    // 1 = top-down, 0 = horizontal view
+    const topDownness = Math.abs(dirRef.current.y)
+
+    // Fade exterior walls as the camera becomes more horizontal.
+    const targetExteriorOpacity = THREE.MathUtils.clamp(
+      THREE.MathUtils.mapLinear(topDownness, 0.12, 0.88, 0.05, 1),
+      0.05,
+      1
+    )
+
+    // Smooth interpolation for the dollhouse effect.
+    const next = THREE.MathUtils.lerp(opacityRef.current, targetExteriorOpacity, 0.12)
+
+    if (Math.abs(next - opacityRef.current) > 0.002) {
+      opacityRef.current = next
+      setExteriorWallOpacity(next)
+    }
+  })
+
+  const interiorWallOpacity = Math.min(0.92, exteriorWallOpacity * 0.72 + 0.12)
+
   if (fp && isValidFootprintPolygon(fp)) {
     return (
-      <PolygonRoomShell
-        footprint={fp}
-        wallHeight={dimensions.height}
-        interiorWalls={dimensions.geometry?.interiorWalls}
-      />
+      <>
+        <PolygonRoomShell
+          footprint={fp}
+          wallHeight={wallHeight}
+          wallPolygons={dimensions.geometry?.wallPolygons}
+          doorOpenings={dimensions.geometry?.doorOpenings}
+          exteriorWallOpacity={exteriorWallOpacity}
+          interiorWallOpacity={interiorWallOpacity}
+        />
+      </>
     )
   }
-  return <RectangularRoom dimensions={dimensions} />
+
+  return (
+    <>
+      <RectangularRoom dimensions={dimensions} wallOpacity={exteriorWallOpacity} />
+    </>
+  )
 }
 
 function DropPlane({
@@ -533,17 +739,44 @@ function SelectionControls({
   onRotate: () => void
   onDelete: () => void
 }) {
+  const stopScenePointer = (e: React.SyntheticEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
   return (
     <Html position={[0, furniture.dimensions.height + 0.5, 0]} center>
-      <div className="flex gap-1 bg-card border border-border rounded-lg p-1 shadow-xl">
-        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onRotate}>
+      <div
+        className="pointer-events-auto flex gap-1 bg-card border border-border rounded-lg p-1 shadow-xl"
+        onMouseDown={stopScenePointer}
+        onPointerDown={stopScenePointer}
+        onClick={stopScenePointer}
+      >
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8"
+          onMouseDown={stopScenePointer}
+          onPointerDown={stopScenePointer}
+          onClick={(e) => {
+            stopScenePointer(e)
+            onRotate()
+          }}
+        >
           <RotateCw className="h-4 w-4" />
         </Button>
         <Button
+          type="button"
           size="icon"
           variant="ghost"
           className="h-8 w-8 text-destructive hover:text-destructive"
-          onClick={onDelete}
+          onMouseDown={stopScenePointer}
+          onPointerDown={stopScenePointer}
+          onClick={(e) => {
+            stopScenePointer(e)
+            onDelete()
+          }}
         >
           <Trash2 className="h-4 w-4" />
         </Button>
@@ -579,30 +812,57 @@ function DraggableFurniture({
   onDragStart?: () => void
   onDragEnd?: () => void
   onBboxReady?: (info: GlbBboxInfo) => void
-  roomBounds: { minX: number; maxX: number; minZ: number; maxZ: number }
+  roomBounds: {
+    minX: number
+    maxX: number
+    minZ: number
+    maxZ: number
+    interiorWalls?: FloorplanWallSegment[]
+  }
 }) {
   const groupRef = useRef<THREE.Group>(null)
-  const [isDragging, setIsDragging] = useState(false)
+  const isDraggingRef = useRef(false)
   const { camera, gl } = useThree()
+
+  // Pre-allocate — never recreated during drag
+  const raycaster = useRef(new THREE.Raycaster())
+  const mouse = useRef(new THREE.Vector2())
+  const dragPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0))
+  const intersection = useRef(new THREE.Vector3())
+  // Raw client coords updated by native pointermove — never stale even when
+  // the cursor leaves the mesh bounding box during a fast drag
+  const clientPos = useRef({ x: 0, y: 0 })
+
+  useEffect(() => {
+    const canvas = gl.domElement
+    const onMove = (e: PointerEvent) => {
+      clientPos.current = { x: e.clientX, y: e.clientY }
+    }
+    canvas.addEventListener("pointermove", onMove)
+    return () => canvas.removeEventListener("pointermove", onMove)
+  }, [gl])
 
   const handlePointerDown = (e: THREE.Event) => {
     e.stopPropagation()
     onSelect()
-    // Capture pointer so pointer-up goes to us, not floor – keeps selection after release
     const canvas = gl.domElement as HTMLCanvasElement
     if (canvas?.setPointerCapture && e.pointerId != null) {
       canvas.setPointerCapture(e.pointerId)
     }
-    setIsDragging((prev) => {
-      if (prev) {
-        logRoomSceneState("setIsDragging(furniture)", "pointer down (already dragging)", true)
-        return prev
-      }
-      logRoomSceneState("setIsDragging(furniture)", "pointer down", false)
-      return true
-    })
+    isDraggingRef.current = true
     onDragStart?.()
     gl.domElement.style.cursor = "grabbing"
+  }
+
+  const commitPosition = () => {
+    if (!groupRef.current) return
+    const p = groupRef.current.position
+    const x = Math.max(roomBounds.minX, Math.min(roomBounds.maxX, Math.round(p.x * 2) / 2))
+    const z = Math.max(roomBounds.minZ, Math.min(roomBounds.maxZ, Math.round(p.z * 2) / 2))
+    const constrained = constrainPointAgainstInteriorWalls(
+      furniture.position[0], furniture.position[2], x, z, roomBounds.interiorWalls
+    )
+    onMove([constrained.x, furniture.dimensions.height / 2, constrained.z])
   }
 
   const handlePointerUp = (e: THREE.Event) => {
@@ -610,40 +870,28 @@ function DraggableFurniture({
     if (canvas?.releasePointerCapture && e.pointerId != null) {
       canvas.releasePointerCapture(e.pointerId)
     }
-    setIsDragging((prev) => {
-      if (!prev) {
-        logRoomSceneState("setIsDragging(furniture)", "pointer up (already idle)", true)
-        return prev
-      }
-      logRoomSceneState("setIsDragging(furniture)", "pointer up", false)
-      return false
-    })
+    if (isDraggingRef.current) commitPosition()
+    isDraggingRef.current = false
     onDragEnd?.()
     gl.domElement.style.cursor = "auto"
   }
 
   useFrame(() => {
-    if (!isDragging || !groupRef.current) return
-
-    const raycaster = new THREE.Raycaster()
-    const mouse = new THREE.Vector2()
+    if (!isDraggingRef.current || !groupRef.current) return
 
     const rect = gl.domElement.getBoundingClientRect()
-    const event = (gl.domElement as any).__lastPointerEvent
-    if (!event) return
+    mouse.current.x = ((clientPos.current.x - rect.left) / rect.width) * 2 - 1
+    mouse.current.y = -((clientPos.current.y - rect.top) / rect.height) * 2 + 1
 
-    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+    raycaster.current.setFromCamera(mouse.current, camera)
+    raycaster.current.ray.intersectPlane(dragPlane.current, intersection.current)
 
-    raycaster.setFromCamera(mouse, camera)
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-    const intersection = new THREE.Vector3()
-    raycaster.ray.intersectPlane(plane, intersection)
-
-    if (intersection) {
-      const x = Math.max(roomBounds.minX, Math.min(roomBounds.maxX, Math.round(intersection.x * 2) / 2))
-      const z = Math.max(roomBounds.minZ, Math.min(roomBounds.maxZ, Math.round(intersection.z * 2) / 2))
-      onMove([x, furniture.dimensions.height / 2, z])
+    const ix = intersection.current.x
+    const iz = intersection.current.z
+    if (Number.isFinite(ix) && Number.isFinite(iz)) {
+      const x = Math.max(roomBounds.minX, Math.min(roomBounds.maxX, ix))
+      const z = Math.max(roomBounds.minZ, Math.min(roomBounds.maxZ, iz))
+      groupRef.current.position.set(x, furniture.dimensions.height / 2, z)
     }
   })
 
@@ -655,9 +903,6 @@ function DraggableFurniture({
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
-      onPointerMove={(e: any) => {
-        ;(gl.domElement as any).__lastPointerEvent = e
-      }}
     >
       <FurnitureSlot
         furniture={furniture}
@@ -665,11 +910,11 @@ function DraggableFurniture({
         isSelected={isSelected}
         onBboxReady={isSelected ? onBboxReady : undefined}
       />
-      {isSelected && (
+      {/*isSelected && (
         <FurnitureInSceneDimensionLabel furniture={furniture} glbBbox={glbBbox} debug={debug} />
-      )}
+      )*/}
       {isSelected && <SelectionControls furniture={furniture} onRotate={onRotate} onDelete={onDelete} />}
-      {isSelected && debug && (
+      {/*isSelected && debug && (
         <Html position={[0, furniture.dimensions.height + 0.2, 0]} center>
           <div className="text-xs bg-black/80 text-white rounded px-2 py-1 font-mono whitespace-nowrap max-w-[200px] truncate">
             <div>{(product?.title ?? furniture.name) || "—"}</div>
@@ -677,7 +922,7 @@ function DraggableFurniture({
             <div>{((product?.model_url ?? furniture.model_url)?.trim() ? "GLB" : "Proxy")}</div>
           </div>
         </Html>
-      )}
+      )}*/}
     </group>
   )
 }
@@ -689,7 +934,7 @@ function SnapshotCapturer({
 }: {
   roomDimensions: RoomDimensions
   snapshotTrigger: number
-  onSnapshdy?: (dataUrl: string) => void
+  onSnapshotReady?: (dataUrl: string) => void
 }) {
   const { gl, scene, camera } = useThree()
   const onSnapshotReadyRef = useRef(onSnapshotReady)
@@ -710,7 +955,7 @@ function SnapshotCapturer({
     /** Room footprint only (height does not affect top-down framing). */
     const topHeight = Math.max(snapW, snapD) * 1.2 + 2
     cam.position.set(0, topHeight, 0)
-    cam.up.set(0, 0, 1)
+    cam.up.set(0, 1, 0)
     cam.lookAt(0, 0, 0)
     cam.updateProjectionMatrix()
 
@@ -739,6 +984,7 @@ function Scene({
   selectedId,
   onSelectFurniture,
   onMoveFurniture,
+  onDeleteFurniture,
   onDropFurniture,
   isDragging,
   snapshotTrigger = 0,
@@ -857,8 +1103,9 @@ function Scene({
       return {
         minX: aabb.minX + inset,
         maxX: aabb.maxX - inset,
-        minZ: aabb.minY + inset,
-        maxZ: aabb.maxY - inset,
+        minZ: -aabb.maxY + inset,
+        maxZ: -aabb.minY - inset,
+        interiorWalls: roomDimensions.geometry?.interiorWalls,
       }
     }
     const { width: rbW, depth: rbD } = roomDimensions
@@ -879,34 +1126,44 @@ function Scene({
         enabled={controlsEnabled}
       />
 
+      {/* Indoor apartment HDRI — provides soft, realistic global illumination.
+          background=false keeps the scene background colour, only affects lighting. */}
       <HdriEnvironmentErrorBoundary>
         <Suspense fallback={null}>
-          <Environment files="lebombo_1k.hdr" path="/hdri/" environmentIntensity={2.5} />
+          <Environment preset="apartment" background={false} environmentIntensity={1.2} />
         </Suspense>
       </HdriEnvironmentErrorBoundary>
-      <ambientLight intensity={2.0} />
-      <hemisphereLight args={["#ffffff", "#e0e4e8", 1.2]} />
-      <directionalLight position={[5, 10, 5]} intensity={4} castShadow shadow-mapSize={[2048, 2048]} />
-      <directionalLight position={[-4, 8, -4]} intensity={2.5} />
+      {/* Subtle fill lights to prevent pitch-black shadows */}
+      <ambientLight intensity={0.4} />
+      <directionalLight
+        position={[6, 10, 6]}
+        intensity={1.5}
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0005}
+      />
+      <directionalLight position={[-5, 8, -5]} intensity={0.6} />
 
       <Room dimensions={roomDimensions} />
 
-      {selectedId == null && !isDragging && (
+      {/*{selectedId == null && !isDragging && (
         <RoomEnvelopeInSceneLabel roomDimensions={roomDimensions} debug={debug} />
-      )}
+      )}*/}
 
-      <Grid
-        args={[roomDimensions.width, roomDimensions.depth]}
-        position={[0, 0.01, 0]}
-        cellSize={1}
-        cellThickness={0.5}
-        cellColor="#c0c4c8"
-        sectionSize={5}
-        sectionThickness={1}
-        sectionColor="#a0a4a8"
-        fadeDistance={50}
-        infiniteGrid={false}
-      />
+      {!isValidFootprintPolygon(roomDimensions.geometry?.footprintPolygon ?? []) && (
+        <Grid
+          args={[roomDimensions.width, roomDimensions.depth]}
+          position={[0, 0.01, 0]}
+          cellSize={1}
+          cellThickness={0.5}
+          cellColor="#c0c4c8"
+          sectionSize={5}
+          sectionThickness={1}
+          sectionColor="#a0a4a8"
+          fadeDistance={50}
+          infiniteGrid={false}
+        />
+      )}
 
       <DropPlane onDrop={onDropFurniture} dimensions={roomDimensions} isDragging={isDragging} />
 
@@ -928,7 +1185,7 @@ function Scene({
           onSelect={() => onSelectFurniture(furniture.id)}
           onMove={(pos) => onMoveFurniture(furniture.id, pos)}
           onRotate={() => {}}
-          onDelete={() => {}}
+          onDelete={() => onDeleteFurniture(furniture.id)}
           onDragStart={() => setFurnitureDragActive(true)}
           onDragEnd={() => setFurnitureDragActive(false)}
           onBboxReady={selectedId === furniture.id ? handleSelectedBboxReady : undefined}
@@ -964,7 +1221,7 @@ function Scene({
 function SetSceneBackground() {
   const { scene } = useThree()
   useEffect(() => {
-    scene.background = new THREE.Color(0xf5f5f7)
+    scene.background = new THREE.Color(0xe6eaef)
   }, [scene])
   return null
 }
@@ -1037,6 +1294,21 @@ export function Room3DScene(props: Room3DSceneProps) {
     () => ({ data: debugOverlayData, setData: setDebugOverlayDataLogged }),
     [debugOverlayData, setDebugOverlayDataLogged]
   )
+  const selectedFurniture = useMemo(
+    () =>
+      props.selectedId != null
+        ? props.placedFurniture.find((f) => f.id === props.selectedId) ?? null
+        : null,
+    [props.selectedId, props.placedFurniture]
+  )
+  
+  const selectedProductForLabel = useMemo(() => {
+    if (!selectedFurniture || !props.products?.length) return null
+    const productId = extractProductIdFromFurnitureId(selectedFurniture.id)
+    return productId
+      ? props.products.find((p) => p.id === productId) ?? null
+      : null
+  }, [selectedFurniture, props.products])
 
   return (
     <DebugOverlayContext.Provider value={debugOverlayContextValue}>
@@ -1053,6 +1325,25 @@ export function Room3DScene(props: Room3DSceneProps) {
             <Scene {...props} sceneView={effectiveSceneView} />
           </Suspense>
         </Canvas>
+
+        {selectedFurniture && (
+        <div className="absolute left-4 top-4 z-20 rounded-xl bg-black/80 text-white px-4 py-3 shadow-lg backdrop-blur-sm max-w-[280px]">
+          <div className="text-sm font-semibold">
+            {selectedProductForLabel?.title ?? selectedFurniture.name}
+          </div>
+
+          <div className="mt-2 text-sm text-amber-100">
+            {selectedFurniture.dimensions.depth.toFixed(2)} ×{" "}
+            {selectedFurniture.dimensions.width.toFixed(2)} ×{" "}
+            {selectedFurniture.dimensions.height.toFixed(2)} m
+          </div>
+
+          <div className="text-xs text-white/65 mt-1">
+            length × width × height
+          </div>
+        </div>
+      )}
+
         {props.debug && debugOverlayData && <DebugDimensionOverlay data={debugOverlayData} />}
         {props.isDragging && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-card border border-primary/50 rounded-full px-4 py-2 flex items-center gap-2">
