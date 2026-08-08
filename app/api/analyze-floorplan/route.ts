@@ -279,7 +279,6 @@ async function detectFloorplanScale(imageUrl: string, apiKey: string): Promise<S
       ],
       response_format: { type: "json_object" },
       max_completion_tokens: 512,
-      temperature: 0.1,
     })
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -416,7 +415,6 @@ export async function POST(req: Request) {
       ],
       response_format: { type: "json_object" as const },
       max_completion_tokens: 4096,
-      temperature: 0.2,
     })
 
   let imageUrlForOpenAI = firstImage
