@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import type { ProductModelLifecycle } from "@/lib/productModelLifecycle"
 
-const DESIGN_TIMEOUT_MS = 25_000
+const DESIGN_TIMEOUT_MS = 50_000
 
-export const maxDuration = 30
+export const maxDuration = 60
 
 interface CurrentPlacement {
   product_id: string
@@ -391,7 +391,9 @@ Return JSON only.`
             { role: "user", content: userPrompt },
           ],
           response_format: { type: "json_object" },
-          max_completion_tokens: 2000,
+          // Reasoning tokens count against this budget on gpt-5.5.
+          max_completion_tokens: 16000,
+          reasoning_effort: "low",
         }),
         signal: controller.signal,
       })

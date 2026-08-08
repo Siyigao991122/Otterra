@@ -13,7 +13,9 @@ import type {
 } from "@/lib/types"
 import { isValidFootprintPolygon, polygonAABB, rectangleFootprintFromAABB } from "@/lib/floorplanGeometry"
 
-export const maxDuration = 90
+// Vercel Hobby caps serverless functions at 60s. Measured ~37s for the vision
+// call and ~10s for scale detection (parallel) with reasoning_effort "low".
+export const maxDuration = 60
 
 /** Chat Completions vision model (logged for debugging). */
 const OPENAI_VISION_MODEL = "gpt-5.5"
@@ -278,7 +280,11 @@ async function detectFloorplanScale(imageUrl: string, apiKey: string): Promise<S
         },
       ],
       response_format: { type: "json_object" },
-      max_completion_tokens: 512,
+      // gpt-5.5 is a reasoning model: this budget covers reasoning tokens too.
+      // Measured ~512 reasoning + ~93 output on a real plan; 8k leaves headroom.
+      max_completion_tokens: 8000,
+      // Cuts this call from ~40s to ~10s with no loss in scale accuracy.
+      reasoning_effort: "low",
     })
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -414,7 +420,13 @@ export async function POST(req: Request) {
         },
       ],
       response_format: { type: "json_object" as const },
-      max_completion_tokens: 4096,
+      // Reasoning + output share this budget. At 4096 the model burned all of it
+      // on reasoning and returned empty content; a real plan needs ~2.6k reasoning
+      // plus ~3.8k output for the full polygon + walls + room list.
+      max_completion_tokens: 16000,
+      // Cuts this call from ~97s to ~37s while still returning 17 rooms and an
+      // 18-point footprint on a real plan — required to fit Vercel's 60s limit.
+      reasoning_effort: "low",
     })
 
   let imageUrlForOpenAI = firstImage
