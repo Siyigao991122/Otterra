@@ -94,6 +94,51 @@ function unitEnvelopeDimensionsFromAnalysis(floorPlan: FloorPlanAnalysis): Analy
   return { width: w, depth: d, height: ceilingHeight }
 }
 
+/**
+ * Vercel rejects request bodies over 4.5 MB at the edge, before the route runs —
+ * the client sees a plain-text "Request Entity Too Large" that fails JSON.parse.
+ * A scale-2 PDF raster base64-encodes well past that, so shrink to the same
+ * 1600px edge `/api/analyze-floorplan` would downscale to anyway.
+ */
+const ANALYZE_UPLOAD_MAX_EDGE_PX = 1600
+
+interface AnalyzeFloorplanResponse {
+  floorPlan: FloorPlanAnalysis
+  scaleDetection?: ScaleDetectionResult
+  error?: string
+}
+
+async function downscaleDataUrlForUpload(dataUrl: string): Promise<string> {
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new window.Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error("Could not load floor plan image"))
+      img.src = dataUrl
+    })
+
+    const { naturalWidth: w, naturalHeight: h } = image
+    const longest = Math.max(w, h)
+    if (!longest || longest <= ANALYZE_UPLOAD_MAX_EDGE_PX) return dataUrl
+
+    const ratio = ANALYZE_UPLOAD_MAX_EDGE_PX / longest
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.max(1, Math.round(w * ratio))
+    canvas.height = Math.max(1, Math.round(h * ratio))
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return dataUrl
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = "high"
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+    return canvas.toDataURL("image/png")
+  } catch (e) {
+    console.warn("[FloorPlanUploader] upload downscale failed, sending original", e)
+    return dataUrl
+  }
+}
+
 async function measurePlanContentBoundsFromPreview(previewSrc: string): Promise<PlanContentBounds> {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new window.Image()
@@ -500,7 +545,6 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
     setBaseAnalysis(null)
 
     const images = convertedImages
-    const pdfBase64 = pdfBase64State
 
     if (!images.length) {
       setError("No images available for analysis.")
@@ -518,25 +562,51 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
         }
       })()
 
-      const analyzePromise = fetch("/api/analyze-floorplan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          images,
-          ...(pdfBase64 ? { pdfBase64, sourceFileName: uploadedFile?.name } : {}),
-        }),
-      }).then(async (response) => {
-        const data = await response.json()
+      // The route reads images[0] only and never reads pdfBase64, so sending every
+      // page plus the raw PDF just inflated the body past Vercel's 4.5 MB limit.
+      const analyzePromise = (async () => {
+        const uploadImage = await downscaleDataUrlForUpload(images[0])
+        const payload = JSON.stringify({
+          images: [uploadImage],
+          ...(uploadedFile?.name ? { sourceFileName: uploadedFile.name } : {}),
+        })
+
+        console.log("[FloorPlanUploader] analyze payload", {
+          pages: images.length,
+          sentPages: 1,
+          originalChars: images[0].length,
+          sentChars: uploadImage.length,
+          payloadMB: +(payload.length / 1024 / 1024).toFixed(2),
+        })
+
+        const response = await fetch("/api/analyze-floorplan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+        })
+
+        // A 413 comes back as plain text, so read it before assuming JSON.
+        const text = await response.text()
+        let data: AnalyzeFloorplanResponse
+        try {
+          data = JSON.parse(text) as AnalyzeFloorplanResponse
+        } catch {
+          throw new Error(
+            response.status === 413
+              ? "Floor plan image is too large to upload. Try a smaller file."
+              : `Analysis failed (${response.status}): ${text.slice(0, 120)}`
+          )
+        }
         if (!response.ok) {
-          throw new Error(data.error || "Failed to analyze floor plan")
+          throw new Error(data?.error || "Failed to analyze floor plan")
         }
         return data
-      })
+      })()
 
       const [preflightBase, data] = await Promise.all([preflightPromise, analyzePromise])
 
-      const floorPlan = data.floorPlan as FloorPlanAnalysis
-      setScaleDetection((data.scaleDetection as ScaleDetectionResult) ?? null)
+      const floorPlan = data.floorPlan
+      setScaleDetection(data.scaleDetection ?? null)
 
       let floorPlanWithDiagnostics: FloorPlanAnalysis = floorPlan
 
@@ -569,7 +639,7 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
       setError(message)
       setStep("upload")
     }
-  }, [convertedImages, pdfBase64State, uploadedFile, buildFinalGeometry])
+  }, [convertedImages, uploadedFile, buildFinalGeometry])
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
