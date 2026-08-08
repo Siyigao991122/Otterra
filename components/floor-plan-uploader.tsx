@@ -364,19 +364,37 @@ export function FloorPlanUploader({ onUpload, onEnterRoom }: FloorPlanUploaderPr
         if (polys.length > 0) wallPolygons = polys
       }
 
-      // Convert detected room centres (normalised 0-1) → FloorplanRoomZone with scene-space polygon
-      // We store just a single-point "polygon" (the centroid) so the Design API can read positions.
+      // Convert detected room centres (normalised 0-1) → FloorplanRoomZone with scene-space polygon.
+      // When bounding box (x1/y1/x2/y2) is available, store a 4-point rectangle so the Design API
+      // knows the actual room extent. Otherwise fall back to a single centroid point.
       const roomZones: FloorplanGeometry["rooms"] = analysisResult.rooms
         .filter(r => r.cx != null && r.cy != null)
-        .map((r, i) => ({
-          id: `room-${i}`,
-          label: r.name,
-          // Single centroid point in plan-space metres (centred like footprintPolygon)
-          polygon: [{
-            x: r.cx! * widthM - widthM / 2,
-            y: -(r.cy! * depthM - depthM / 2),
-          }],
-        }))
+        .map((r, i) => {
+          if (r.x1 != null && r.y1 != null && r.x2 != null && r.y2 != null) {
+            const sx1 = r.x1 * widthM - widthM / 2
+            const sx2 = r.x2 * widthM - widthM / 2
+            const sy1 = -(r.y1 * depthM - depthM / 2)
+            const sy2 = -(r.y2 * depthM - depthM / 2)
+            return {
+              id: `room-${i}`,
+              label: r.name,
+              polygon: [
+                { x: sx1, y: sy1 },
+                { x: sx2, y: sy1 },
+                { x: sx2, y: sy2 },
+                { x: sx1, y: sy2 },
+              ],
+            }
+          }
+          return {
+            id: `room-${i}`,
+            label: r.name,
+            polygon: [{
+              x: r.cx! * widthM - widthM / 2,
+              y: -(r.cy! * depthM - depthM / 2),
+            }],
+          }
+        })
 
       const nextGeometry: FloorplanGeometry = {
         ...(aiGeom ?? {}),

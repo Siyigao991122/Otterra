@@ -18,6 +18,11 @@ interface RoomZone {
   /** Scene-space centre in metres (X right, Z into screen). */
   x: number
   z: number
+  /** Scene-space bounds in metres — present when bounding box was detected. */
+  minX?: number
+  maxX?: number
+  minZ?: number
+  maxZ?: number
 }
 
 interface DesignRequest {
@@ -58,6 +63,19 @@ interface DesignPlan {
   placements: DesignPlacement[]
   shopping_list: Array<{ product_id: string; title: string; qty: number }>
   notes: string[]
+}
+
+const KNOWN_BRANDS = [
+  "ikea", "cb2", "west elm", "pottery barn", "crate and barrel",
+  "scandinavian designs", "article", "wayfair", "restoration hardware", "rh",
+]
+
+function parseBrandFromPrompt(prompt: string): string | null {
+  const lower = prompt.toLowerCase()
+  for (const brand of KNOWN_BRANDS) {
+    if (lower.includes(brand)) return brand
+  }
+  return null
 }
 
 function parseBudgetFromPrompt(prompt: string): number | null {
@@ -250,9 +268,19 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const budget = parseBudgetFromPrompt(prompt)
+    if (budget != null) {
+      console.log("[design] Parsed budget from prompt:", budget)
+    }
+
+    const brand = parseBrandFromPrompt(prompt)
+    if (brand != null) {
+      console.log("[design] Parsed brand from prompt:", brand)
+    }
+
     console.log("[design] Fetching catalog", { category, room })
 
-    const { data: products, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("products")
       .select(
         "id, title, price, currency, image_url, product_url, length_m, width_m, height_m, dims_confidence, brand, category, model_url, model_status, model_source, model_version, model_updated_at, model_notes"
@@ -262,6 +290,16 @@ export async function POST(req: NextRequest) {
       .order("updated_at", { ascending: false })
       .limit(30)
 
+    if (brand) {
+      query = query.ilike("brand", `%${brand}%`)
+    }
+
+    if (budget != null) {
+      query = query.lte("price", budget)
+    }
+
+    const { data: products, error } = await query
+
     if (error) {
       console.error("[design] Products fetch error:", error)
       return NextResponse.json({ error: "Failed to fetch catalog." }, { status: 500 })
@@ -269,11 +307,6 @@ export async function POST(req: NextRequest) {
 
     const catalog: CatalogProduct[] = (products ?? []) as CatalogProduct[]
     console.log("[design] Catalog size:", catalog.length)
-
-    const budget = parseBudgetFromPrompt(prompt)
-    if (budget != null) {
-      console.log("[design] Parsed budget from prompt:", budget)
-    }
 
     const apiKey = process.env.OPENAI_API_KEY
     if (!apiKey || apiKey.length < 10) {
@@ -289,6 +322,12 @@ Rules:
 - Use ONLY product ids from the catalog. Do not invent ids.
 - Prefer items with dims_confidence=2 for placements (they have reliable dimensions).
 - Placements stay within room bounds: x in [-${(room.width_m / 2 - 0.5).toFixed(1)}, ${(room.width_m / 2 - 0.5).toFixed(1)}], z in [-${(room.depth_m / 2 - 0.5).toFixed(1)}, ${(room.depth_m / 2 - 0.5).toFixed(1)}].
+- ZONE PLACEMENT RULES — strictly follow the room zones provided:
+  * Sofas, coffee tables, armchairs → Living Room or Den only
+  * Beds, nightstands, dressers → Bedroom only
+  * Dining tables, dining chairs → Dining Room or Kitchen/Dining area only
+  * NEVER place sofas or beds in Bathroom, Kitchen, Laundry, or Closet zones
+  * When a zone has bounds (minX/maxX/minZ/maxZ), place furniture INSIDE those bounds
 ${budget != null ? `- Total cost must stay under $${budget}. Sum (price * qty) for all shopping_list items.` : ""}
 
 Return JSON exactly matching this schema:
@@ -315,8 +354,14 @@ Return JSON exactly matching this schema:
       : ""
 
     const roomZonesText = roomZones.length > 0
-      ? `\nRoom zones (scene coordinates, X right / Z into screen, origin = centre):\n` +
-        roomZones.map(z => `- ${z.name}: x=${z.x.toFixed(1)}, z=${z.z.toFixed(1)}`).join("\n") + "\n"
+      ? `\nRoom zones (scene coordinates, X right / Z into screen, origin = room centre):\n` +
+        roomZones.map(z => {
+          const hasBounds = z.minX != null && z.maxX != null && z.minZ != null && z.maxZ != null
+          const boundsStr = hasBounds
+            ? `, bounds x:[${z.minX!.toFixed(1)},${z.maxX!.toFixed(1)}] z:[${z.minZ!.toFixed(1)},${z.maxZ!.toFixed(1)}]`
+            : ""
+          return `- ${z.name}: center x=${z.x.toFixed(1)}, z=${z.z.toFixed(1)}${boundsStr}`
+        }).join("\n") + "\n"
       : ""
 
     const userPrompt = `Room: ${room.width_m}m × ${room.depth_m}m × ${room.height_m}m ceiling.
@@ -346,7 +391,7 @@ Return JSON only.`
             { role: "user", content: userPrompt },
           ],
           response_format: { type: "json_object" },
-          max_tokens: 2000,
+          max_completion_tokens: 2000,
           temperature: 0.3,
         }),
         signal: controller.signal,
@@ -382,6 +427,43 @@ Return JSON only.`
         console.log("[design] No valid placements, using mock")
         const { plan: mockPlan, catalog: c } = buildMockPlan(catalog, room, prompt)
         return NextResponse.json({ plan: mockPlan, catalog: c })
+      }
+
+      // Post-process: snap any placement that falls outside all zone bounds back to
+      // the most appropriate zone centre based on product category.
+      const zonesWithBounds = roomZones.filter(
+        z => z.minX != null && z.maxX != null && z.minZ != null && z.maxZ != null
+      )
+      if (zonesWithBounds.length > 0) {
+        const LIVING_KEYWORDS = /living|lounge|den|great/i
+        const BED_KEYWORDS = /bed|master|guest/i
+        const DINING_KEYWORDS = /dining|kitchen/i
+        const BAD_ZONES = /bath|toilet|laundry|closet|wc/i
+        for (const placement of plan.placements) {
+          const prod = catalog.find(c => c.id === placement.product_id)
+          const cat = prod?.category ?? ""
+          // Determine target zone type from category
+          let targetKeyword: RegExp | null = null
+          if (cat === "sofa") targetKeyword = LIVING_KEYWORDS
+          else if (cat === "bed") targetKeyword = BED_KEYWORDS
+          else if (cat === "dining_table" || cat === "chair") targetKeyword = DINING_KEYWORDS
+
+          // Check if placement is inside a "bad" zone (bathroom, laundry, etc.)
+          const { x, z } = placement.position
+          const inBadZone = zonesWithBounds.some(zone =>
+            BAD_ZONES.test(zone.name) &&
+            x >= zone.minX! && x <= zone.maxX! &&
+            z >= zone.minZ! && z <= zone.maxZ!
+          )
+
+          if (inBadZone && targetKeyword) {
+            const targetZone = zonesWithBounds.find(zone => targetKeyword!.test(zone.name))
+            if (targetZone) {
+              placement.position = clampPosition(targetZone.x, targetZone.z, room)
+              console.log(`[design] snapped ${placement.title} from bad zone to ${targetZone.name}`)
+            }
+          }
+        }
       }
 
       const elapsed = Date.now() - startTime

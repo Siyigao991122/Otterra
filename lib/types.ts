@@ -143,6 +143,11 @@ export interface DetectedRoom {
   /** Normalised 0–1 centre of this room on the floor plan image (from GPT). */
   cx?: number
   cy?: number
+  /** Normalised 0–1 bounding box of this room (top-left x1/y1, bottom-right x2/y2). */
+  x1?: number
+  y1?: number
+  x2?: number
+  y2?: number
   /** Raw dimension text found on the floor plan, e.g. "14'6\" × 20'5\"" */
   dimensionText?: string
   /** Whether dimensions came from OCR text on the plan (true) or GPT visual estimate (false) */

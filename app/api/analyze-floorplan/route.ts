@@ -142,6 +142,10 @@ function mergeAnalysis(
         const dimensionsFromOCR = o.dimensionsFromOCR === true
         const cx = Number.isFinite(Number(o.cx)) ? Number(o.cx) : undefined
         const cy = Number.isFinite(Number(o.cy)) ? Number(o.cy) : undefined
+        const x1 = Number.isFinite(Number(o.x1)) ? Number(o.x1) : undefined
+        const y1 = Number.isFinite(Number(o.y1)) ? Number(o.y1) : undefined
+        const x2 = Number.isFinite(Number(o.x2)) ? Number(o.x2) : undefined
+        const y2 = Number.isFinite(Number(o.y2)) ? Number(o.y2) : undefined
         return {
           name: typeof o.name === "string" ? o.name : `Room ${i + 1}`,
           widthMeters: Number(o.widthMeters) || 4,
@@ -149,6 +153,10 @@ function mergeAnalysis(
           heightMeters: Number(o.heightMeters) || 2.7,
           ...(cx != null ? { cx } : {}),
           ...(cy != null ? { cy } : {}),
+          ...(x1 != null ? { x1 } : {}),
+          ...(y1 != null ? { y1 } : {}),
+          ...(x2 != null ? { x2 } : {}),
+          ...(y2 != null ? { y2 } : {}),
           ...(dimensionText ? { dimensionText } : {}),
           ...(dimensionsFromOCR ? { dimensionsFromOCR } : {}),
         }
@@ -229,10 +237,13 @@ const VISION_SYSTEM = `You are an architectural assistant extracting the geometr
 Use NORMALIZED coordinates: x=0.0 is the LEFT edge of the image, x=1.0 is the RIGHT edge, y=0.0 is the TOP edge, y=1.0 is the BOTTOM edge. All polygon and wall coordinates must be in this 0.0–1.0 range.
 
 Return a single JSON object with:
-- rooms: array of { name, widthMeters, depthMeters, heightMeters, cx, cy, dimensionText?, dimensionsFromOCR? }
-  * name: room name (e.g. "Living Room", "Master Bedroom", "Kitchen")
+- rooms: array of { name, widthMeters, depthMeters, heightMeters, cx, cy, x1, y1, x2, y2, dimensionText?, dimensionsFromOCR? }
+  * name: READ the text label printed inside each room on the floor plan (e.g. "BEDROOM", "BATH", "LIVING ROOM", "KITCHEN", "DINING ROOM", "DEN", "CLOSET", "LAUNDRY"). Use that exact label as the name. NEVER merge all rooms into a single entry.
+  * CRITICAL: List EVERY separately enclosed room space — a 2-bedroom apartment must have entries for Bedroom 1, Bedroom 2, Bathroom, Living Room, Kitchen, etc. A typical apartment has 5–9 rooms.
   * widthMeters, depthMeters, heightMeters: real dimensions in meters
-  * cx, cy: NORMALIZED 0–1 centre of this room on the image (e.g. cx=0.7, cy=0.3 means upper-right area)
+  * cx, cy: NORMALIZED 0–1 centre of this room on the image
+  * x1, y1: NORMALIZED 0–1 top-left corner of this room's bounding box
+  * x2, y2: NORMALIZED 0–1 bottom-right corner of this room's bounding box
   * dimensionText: the EXACT dimension text printed on the plan for this room, e.g. "14'6\" × 20'5\"" or "4.2m × 3.8m". Leave out if no text found.
   * dimensionsFromOCR: true if dimensionText was read from the plan, false if you estimated visually.
   * PRIORITY: If you can read dimension text on the plan (e.g. "12'-2\" × 12'-2\""), use those values — they are more accurate than visual estimates. Convert feet/inches to meters (1ft = 0.3048m).
@@ -267,7 +278,7 @@ async function detectFloorplanScale(imageUrl: string, apiKey: string): Promise<S
         },
       ],
       response_format: { type: "json_object" },
-      max_tokens: 512,
+      max_completion_tokens: 512,
       temperature: 0.1,
     })
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -404,7 +415,7 @@ export async function POST(req: Request) {
         },
       ],
       response_format: { type: "json_object" as const },
-      max_tokens: 4096,
+      max_completion_tokens: 4096,
       temperature: 0.2,
     })
 

@@ -219,14 +219,28 @@ function RoomPageContent() {
         })
         .filter(Boolean)
 
-      // Room zones: geometry.rooms stores centroid as a single-point polygon in scene metres
+      // Room zones: polygon is either 4-point bounding box or single centroid (scene metres)
       const roomZones = (roomDimensions.geometry?.rooms ?? [])
         .filter(r => r.polygon?.length > 0)
-        .map(r => ({
-          name: r.label ?? "Room",
-          x: r.polygon[0]!.x,
-          z: -r.polygon[0]!.y,  // plan y → world -Z
-        }))
+        .map(r => {
+          const pts = r.polygon
+          const xs = pts.map(p => p.x)
+          const zs = pts.map(p => -p.y)  // plan y → world Z
+          const cx = xs.reduce((a, b) => a + b, 0) / xs.length
+          const cz = zs.reduce((a, b) => a + b, 0) / zs.length
+          if (pts.length >= 4) {
+            return {
+              name: r.label ?? "Room",
+              x: cx,
+              z: cz,
+              minX: Math.min(...xs),
+              maxX: Math.max(...xs),
+              minZ: Math.min(...zs),
+              maxZ: Math.max(...zs),
+            }
+          }
+          return { name: r.label ?? "Room", x: cx, z: cz }
+        })
       const res = await fetch("/api/design", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -1,15 +1,18 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Card } from "@/components/ui/card"
 import { Send, Sparkles, Plus, Loader2 } from "lucide-react"
 import type { Furniture, RoomDimensions } from "@/lib/types"
-import { FURNITURE_CATALOG } from "@/lib/furniture-catalog"
+
+interface ChatMessage {
+  id: string
+  role: "user" | "assistant"
+  text: string
+  placements?: { title: string; qty: number }[]
+}
 
 interface AIChatPanelProps {
   onAddFurniture: (furniture: Furniture) => void
@@ -19,41 +22,35 @@ interface AIChatPanelProps {
   roomDimensions: RoomDimensions
 }
 
-export function AIChatPanel({ onAddFurniture, onMoveFurniture, selectedFurnitureId, placedFurniture, roomDimensions }: AIChatPanelProps) {
+function detectCategory(prompt: string): string {
+  const p = prompt.toLowerCase()
+  if (p.includes("bed") || p.includes("bedroom") || p.includes("mattress")) return "bed"
+  if (p.includes("dining") || p.includes("dinner") || p.includes("eating")) return "dining_table"
+  return "sofa"
+}
+
+const QUICK_PROMPTS = [
+  "IKEA sofa for living room",
+  "Dining table under $400",
+  "Scandinavian bedroom setup",
+  "Modern living room layout",
+]
+
+export function AIChatPanel({
+  onAddFurniture,
+  placedFurniture,
+  roomDimensions,
+}: AIChatPanelProps) {
   const [input, setInput] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      text: `Hi! Tell me what you want and I'll place real furniture in your room.\n\nTry: "IKEA sofa under $500" or "Scandinavian dining table"`,
+    },
+  ])
   const scrollRef = useRef<HTMLDivElement>(null)
-
-  const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
-    initialMessages: [
-      {
-        id: "welcome",
-        role: "assistant",
-        content: `Hello! I'm your AI interior design assistant. I can help you:
-
-• **Recommend furniture** based on your room size and style preferences
-• **Suggest color schemes** that complement your space
-• **Optimize furniture placement** for better flow
-• **Find matching pieces** for your existing furniture
-
-Your room is ${roomDimensions.width}m × ${roomDimensions.depth}m. What style are you going for?`,
-        parts: [
-          {
-            type: "text" as const,
-            text: `Hello! I'm your AI interior design assistant. I can help you:
-
-• **Recommend furniture** based on your room size and style preferences
-• **Suggest color schemes** that complement your space
-• **Optimize furniture placement** for better flow
-• **Find matching pieces** for your existing furniture
-
-Your room is ${roomDimensions.width}m × ${roomDimensions.depth}m. What style are you going for?`,
-          },
-        ],
-        createdAt: new Date(),
-      },
-    ],
-  })
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -61,122 +58,151 @@ Your room is ${roomDimensions.width}m × ${roomDimensions.depth}m. What style ar
     }
   }, [messages])
 
-  const handleSend = () => {
-    if (!input.trim() || status !== "ready") return
+  const handleSend = async () => {
+    const userText = input.trim()
+    if (!userText || loading) return
 
-    const context = `Room: ${roomDimensions.width}m × ${roomDimensions.depth}m, ${roomDimensions.height}m ceiling. Current furniture: ${placedFurniture.map((f) => f.name).join(", ") || "none"}.`
-
-    sendMessage({
-      text: `${input}\n\n[Context: ${context}]`,
-    })
     setInput("")
-  }
+    setMessages((prev) => [
+      ...prev,
+      { id: `u-${Date.now()}`, role: "user", text: userText },
+    ])
+    setLoading(true)
 
-  // Parse furniture recommendations from AI response
-  const parseFurnitureRecommendations = (content: string): Furniture[] => {
-    const recommendations: Furniture[] = []
-    const allFurniture = Object.values(FURNITURE_CATALOG).flat()
+    try {
+      const category = detectCategory(userText)
 
-    // Simple matching - check if any furniture names are mentioned
-    allFurniture.forEach((item) => {
-      if (
-        content.toLowerCase().includes(item.name.toLowerCase()) ||
-        content.toLowerCase().includes(item.type.toLowerCase())
-      ) {
-        if (!recommendations.find((r) => r.name === item.name)) {
-          recommendations.push(item)
+      const currentPlacements = placedFurniture.map((f) => {
+        const match = f.id.match(/^(?:design|layout)-(.+)-(\d+)$/)
+        const productId = match ? match[1] : null
+        return productId
+          ? { product_id: productId, title: f.name, position: { x: f.position[0], z: f.position[2] }, rotation_y_deg: f.rotation }
+          : null
+      }).filter(Boolean)
+
+      const res = await fetch("/api/design", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: userText,
+          room: {
+            width_m: roomDimensions.width,
+            depth_m: roomDimensions.depth,
+            height_m: roomDimensions.height,
+          },
+          category,
+          currentPlacements: currentPlacements.length > 0 ? currentPlacements : undefined,
+        }),
+      })
+
+      const data = await res.json()
+      const plan = data.plan
+      const catalog: Record<string, unknown>[] = data.catalog ?? []
+
+      if (plan?.placements?.length > 0) {
+        const placedItems: { title: string; qty: number }[] = []
+
+        for (const placement of plan.placements) {
+          const product = catalog.find((p) => p.id === placement.product_id) as Record<string, unknown> | undefined
+          if (!product) continue
+
+          const w = Number(product.width_m) || 2
+          const h = Number(product.height_m) || 0.85
+          const d = Number(product.length_m) || 0.9
+
+          const furniture: Furniture = {
+            id: `design-${placement.product_id}-${Date.now()}`,
+            type: String(product.category ?? "sofa"),
+            name: placement.title,
+            color: "#8B7355",
+            dimensions: { width: w, height: h, depth: d },
+            position: [placement.position.x, h / 2, placement.position.z],
+            rotation: placement.rotation_y_deg ?? 0,
+            model_url: product.model_url ? String(product.model_url) : null,
+            dimensionsAuthoritative: true,
+          }
+          onAddFurniture(furniture)
+          placedItems.push({ title: placement.title, qty: placement.qty ?? 1 })
         }
+
+        const totalCost = (plan.shopping_list ?? []).reduce((sum: number, item: Record<string, unknown>) => {
+          const p = catalog.find((c) => c.id === item.product_id) as Record<string, unknown> | undefined
+          return sum + (Number(p?.price) || 0) * (Number(item.qty) || 1)
+        }, 0)
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a-${Date.now()}`,
+            role: "assistant",
+            text: `**${plan.title}**\n\n${placedItems.length} piece(s) placed${totalCost > 0 ? ` — ~$${totalCost.toFixed(0)} total` : ""}.${plan.notes?.length ? "\n" + plan.notes.join(" ") : ""}`,
+            placements: placedItems,
+          },
+        ])
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a-${Date.now()}`,
+            role: "assistant",
+            text: "No matching furniture found. Try specifying sofa, bed, or dining table — or adjust your budget.",
+          },
+        ])
       }
-    })
-
-    return recommendations.slice(0, 3)
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { id: `a-${Date.now()}`, role: "assistant", text: "Something went wrong. Please try again." },
+      ])
+    } finally {
+      setLoading(false)
+    }
   }
-
-  const quickPrompts = [
-    "Suggest a modern living room setup",
-    "What furniture works for a small space?",
-    "Recommend a cozy reading corner",
-    "Help me choose a color scheme",
-  ]
 
   return (
     <aside className="w-96 border-l border-border bg-card flex flex-col">
-      <div className="p-4 border-b border-border flex items-center justify-between">
+      <div className="p-4 border-b border-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-primary" />
           </div>
           <div>
             <h2 className="font-semibold text-sm">AI Design Assistant</h2>
-            <p className="text-xs text-muted-foreground">Powered by AI</p>
+            <p className="text-xs text-muted-foreground">Places real furniture instantly</p>
           </div>
         </div>
       </div>
 
       <ScrollArea className="flex-1 p-4" ref={scrollRef}>
         <div className="space-y-4">
-          {messages.map((message) => (
-            <div key={message.id}>
+          {messages.map((msg) => (
+            <div key={msg.id}>
               <div
                 className={`rounded-2xl px-4 py-3 ${
-                  message.role === "user" ? "bg-primary text-primary-foreground ml-8" : "bg-muted mr-8"
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground ml-8"
+                    : "bg-muted mr-8"
                 }`}
               >
-                <p className="text-sm whitespace-pre-wrap">
-                  {message.parts?.find((p) => p.type === "text")?.text || message.content}
-                </p>
+                <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
               </div>
-
-              {message.role === "assistant" && message.id !== "welcome" && (
-                <div className="mt-2 mr-8">
-                  {parseFurnitureRecommendations(
-                    message.parts?.find((p) => p.type === "text")?.text || message.content || "",
-                  ).map((furniture, idx) => (
-                    <Card
-                      key={idx}
-                      className="p-3 mt-2 bg-muted/50 hover:bg-muted transition-colors cursor-pointer group"
-                      onClick={() => {
-                        // If a piece of furniture is already selected in the scene,
-                        // move it to the suggested position instead of adding a new one.
-                        if (selectedFurnitureId && onMoveFurniture) {
-                          onMoveFurniture(selectedFurnitureId, furniture.position)
-                        } else {
-                          onAddFurniture(furniture)
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center"
-                          style={{ backgroundColor: furniture.color + "20" }}
-                        >
-                          <div className="w-5 h-5 rounded" style={{ backgroundColor: furniture.color }} />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{furniture.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {furniture.dimensions.width}m × {furniture.dimensions.depth}m
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          {selectedFurnitureId ? <span className="text-xs">Move</span> : <Plus className="w-4 h-4" />}
-                        </Button>
-                      </div>
-                    </Card>
+              {msg.placements && msg.placements.length > 0 && (
+                <div className="mt-2 mr-8 space-y-1">
+                  {msg.placements.map((item, i) => (
+                    <div key={i} className="text-xs text-muted-foreground flex items-center gap-1 px-1">
+                      <Plus className="w-3 h-3" />
+                      {item.qty > 1 ? `${item.qty}× ` : ""}{item.title}
+                    </div>
                   ))}
                 </div>
               )}
             </div>
           ))}
 
-          {status === "streaming" && (
+          {loading && (
             <div className="flex items-center gap-2 text-muted-foreground mr-8">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">Thinking...</span>
+              <span className="text-sm">Finding furniture...</span>
             </div>
           )}
         </div>
@@ -186,17 +212,15 @@ Your room is ${roomDimensions.width}m × ${roomDimensions.depth}m. What style ar
         <div className="p-4 border-t border-border">
           <p className="text-xs text-muted-foreground mb-2">Quick prompts</p>
           <div className="flex flex-wrap gap-2">
-            {quickPrompts.map((prompt, idx) => (
+            {QUICK_PROMPTS.map((p, i) => (
               <Button
-                key={idx}
+                key={i}
                 variant="outline"
                 size="sm"
                 className="text-xs h-8 bg-transparent"
-                onClick={() => {
-                  setInput(prompt)
-                }}
+                onClick={() => setInput(p)}
               >
-                {prompt}
+                {p}
               </Button>
             ))}
           </div>
@@ -214,11 +238,11 @@ Your room is ${roomDimensions.width}m × ${roomDimensions.depth}m. What style ar
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask for design advice..."
+            placeholder="e.g. IKEA sofa under $500..."
             className="flex-1 bg-input"
-            disabled={status !== "ready"}
+            disabled={loading}
           />
-          <Button type="submit" size="icon" disabled={!input.trim() || status !== "ready"}>
+          <Button type="submit" size="icon" disabled={!input.trim() || loading}>
             <Send className="w-4 h-4" />
           </Button>
         </form>
