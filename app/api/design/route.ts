@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
+import { checkRateLimit, clientIpFromRequest } from "@/lib/rateLimit"
 import type { ProductModelLifecycle } from "@/lib/productModelLifecycle"
 
 const DESIGN_TIMEOUT_MS = 50_000
@@ -236,9 +237,24 @@ function validateAndSanitizePlan(
   }
 }
 
+const RATE_LIMIT_MAX = 20
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+
 export async function POST(req: NextRequest) {
   const startTime = Date.now()
   console.log("[design] POST /api/design started")
+
+  const rateLimit = checkRateLimit(
+    `design:${clientIpFromRequest(req)}`,
+    RATE_LIMIT_MAX,
+    RATE_LIMIT_WINDOW_MS
+  )
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a few minutes and try again." },
+      { status: 429 }
+    )
+  }
 
   try {
     let body: DesignRequest

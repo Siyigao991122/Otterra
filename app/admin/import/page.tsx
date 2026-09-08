@@ -195,12 +195,20 @@ export default function AdminImportPage() {
             <ArrowLeft className="w-4 h-4" />
             Back
           </Link>
-          <Link
-            href="/admin/products"
-            className="text-sm text-primary hover:underline"
-          >
-            Edit 3D model URLs
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/admin/invites"
+              className="text-sm text-primary hover:underline"
+            >
+              Invite codes
+            </Link>
+            <Link
+              href="/admin/products"
+              className="text-sm text-primary hover:underline"
+            >
+              Edit 3D model URLs
+            </Link>
+          </div>
         </div>
 
         <Card className="border-border">

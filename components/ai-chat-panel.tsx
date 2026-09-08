@@ -96,6 +96,15 @@ export function AIChatPanel({
       })
 
       const data = await res.json()
+
+      if (!res.ok) {
+        setMessages((prev) => [
+          ...prev,
+          { id: `a-${Date.now()}`, role: "assistant", text: data?.error || "Something went wrong. Please try again." },
+        ])
+        return
+      }
+
       const plan = data.plan
       const catalog: Record<string, unknown>[] = data.catalog ?? []
 

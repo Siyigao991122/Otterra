@@ -1,5 +1,10 @@
-import { DesignEditor } from "@/components/design-editor"
+import { WaitlistForm } from "@/components/waitlist-form"
 
-export default function Home() {
-  return <DesignEditor />
+interface HomePageProps {
+  searchParams: Promise<{ ref?: string }>
+}
+
+export default async function Home({ searchParams }: HomePageProps) {
+  const params = await searchParams
+  return <WaitlistForm refParam={params.ref ?? ""} />
 }

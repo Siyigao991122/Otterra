@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer"
 import { NextResponse } from "next/server"
+import { checkRateLimit, clientIpFromRequest } from "@/lib/rateLimit"
 import {
   downscaleDataUrlForOpenAIIfNeeded,
   FLOORPLAN_OPENAI_MAX_EDGE_PX,
@@ -366,7 +367,23 @@ function applyScaleToNormalizedGeometry(
   }
 }
 
+// Each call runs two gpt-5.5 vision requests (~37s each); cap per IP to blunt cost abuse.
+const RATE_LIMIT_MAX = 8
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+
 export async function POST(req: Request) {
+  const rateLimit = checkRateLimit(
+    `analyze-floorplan:${clientIpFromRequest(req)}`,
+    RATE_LIMIT_MAX,
+    RATE_LIMIT_WINDOW_MS
+  )
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many floor plan analyses from this device. Please wait a few minutes and try again." },
+      { status: 429 }
+    )
+  }
+
   let body: { images?: string[]; pdfBase64?: string; sourceFileName?: string }
   try {
     body = await req.json()

@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Project
 
@@ -39,14 +39,13 @@ Secrets go in `.env.local` at the project root — **not** as shell exports — 
 
 `PRODUCTS_OFFLINE_FALLBACK=1` forces `/api/products` to serve `lib/devProductsFallback.ts` (local GLBs in `public/models/`) when Supabase is unreachable in a non-dev build; dev mode auto-falls back on network errors.
 
-`ACCESS_TOKEN_SECRET`, when set, keeps `/` + `/waitlist` + `/api/waitlist` public and gates the product studio (`/design`), admin pages, and non-public APIs behind an invite code entered at `/access`. Unset in local dev unless testing the gate itself. Per-person codes are managed at `/admin/invites` (`lib/inviteCodes.ts`, `invite_codes` table — run `supabase/migrations/20260809_invite_codes.sql` once) and redeemed via `/api/access`, which signs a session cookie (`lib/accessToken.ts`, HMAC, verified in middleware with no DB call per request — revoking a code stops new logins but doesn't kick out an already-unlocked cookie). `SITE_ACCESS_CODE` is an optional single "owner" code that always works alongside per-person codes.
+`ACCESS_TOKEN_SECRET`, when set, gates the entire site (`middleware.ts`) behind an invite code entered at `/access` — this is the only auth in front of `/admin` page routes (though not `/api/products` POST/bulk — see below). Unset in local dev unless testing the gate itself. Per-person codes are managed at `/admin/invites` (`lib/inviteCodes.ts`, `invite_codes` table — run `supabase/migrations/20260809_invite_codes.sql` once) and redeemed via `/api/access`, which signs a session cookie (`lib/accessToken.ts`, HMAC, verified in middleware with no DB call per request — revoking a code stops new logins but doesn't kick out an already-unlocked cookie). `SITE_ACCESS_CODE` is an optional single "owner" code that always works alongside per-person codes.
 
 ## Architecture
 
 ### Two entry surfaces
 
-- **`/` (public waitlist)** — public acquisition page. Visitors can join the waitlist or follow the invite-code link to `/access`.
-- **`/design` (DesignEditor)** — protected product flow: upload floor plan → 3D scene → furniture sidebar → AI chat panel. Uses transient component state.
+- **`/` (DesignEditor)** — `app/page.tsx` → `components/design-editor.tsx`. In-page flow: upload floor plan → 3D scene → furniture sidebar → AI chat panel. Uses transient component state.
 - **`/room`** — `app/room/page.tsx`. Standalone 3D room driven by **sessionStorage** (`roomDimensionsSession`) for dimensions and **localStorage** (`roomLayout`, key `room_layout_v2`) for furniture placements. Layout persists across reloads but is wiped on a new upload.
 
 ### Floor plan pipeline
@@ -80,7 +79,7 @@ Mixing these up silently produces sideways/oversized furniture. The same convent
 ### AI APIs in use
 
 - `/api/analyze-floorplan` — OpenAI `gpt-4o` vision (direct REST, not SDK).
-- `/api/chat` — Anthropic `anthropic/claude-sonnet-4-20250514` via the Vercel `ai` SDK (`streamText`).
+- `/api/chat` — Anthropic `anthropic/Codex-sonnet-4-20250514` via the Vercel `ai` SDK (`streamText`).
 - `/api/design` — Layout planner that picks products + positions from the Supabase catalog.
 
 Both `/api/analyze-floorplan` and `/api/design` are rate-limited per IP (`lib/rateLimit.ts`) as a defense-in-depth cost guard — it's an in-memory fixed-window limiter, not a hard cap across serverless instances.
