@@ -1,5 +1,3 @@
-import { Resend } from "resend"
-
 const FROM_ADDRESS = process.env.RESEND_FROM_EMAIL || "Otterra <onboarding@resend.dev>"
 
 export type SendInviteEmailResult = { ok: true } | { ok: false; error: string }
@@ -41,15 +39,22 @@ export async function sendInviteEmail(to: string, code: string): Promise<SendInv
   }
 
   try {
-    const resend = new Resend(apiKey)
-    const { error } = await resend.emails.send({
-      from: FROM_ADDRESS,
-      to,
-      subject: "Your Otterra invite code",
-      html: inviteEmailHtml(code),
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: FROM_ADDRESS,
+        to: [to],
+        subject: "Your Otterra invite code",
+        html: inviteEmailHtml(code),
+      }),
     })
-    if (error) {
-      return { ok: false, error: error.message }
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as { message?: string } | null
+      return { ok: false, error: data?.message || `Resend returned HTTP ${response.status}.` }
     }
     return { ok: true }
   } catch (e) {
