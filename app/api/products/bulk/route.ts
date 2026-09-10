@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
+import { requireAdmin } from "@/lib/adminAuth"
 
 const ALLOWED_CATEGORIES = ["sofa", "bed", "dining_table"] as const
 const MAX_ITEMS = 200
@@ -53,6 +54,8 @@ interface BulkBody {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdmin(req)
+  if (auth) return auth
   try {
     let body: BulkBody
     try {

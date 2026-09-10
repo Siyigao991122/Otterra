@@ -16,7 +16,7 @@ const PUBLIC_PATHS = new Set([
   "/api/access",
   "/otterra-living-room-v1.png",
 ])
-const PUBLIC_PREFIXES = ["/_next", "/models", "/pdf.worker", "/otterra-"]
+const PUBLIC_PREFIXES = ["/_next", "/models", "/pdf.worker", "/otterra-", "/admin"]
 
 export async function middleware(req: NextRequest) {
   const secret = process.env.ACCESS_TOKEN_SECRET

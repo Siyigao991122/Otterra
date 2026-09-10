@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowLeft, Save, Loader2, Box, Package } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ProductModelLifecycle } from "@/lib/productModelLifecycle"
+import { adminHeaders } from "@/lib/adminClient"
 
 const CATEGORIES = [
   { value: "", label: "All" },
@@ -85,10 +86,7 @@ export default function AdminProductsPage() {
     try {
       const res = await fetch(`/api/products/${id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-api-key": process.env.NEXT_PUBLIC_ADMIN_API_KEY ?? "",
-        },
+        headers: await adminHeaders(),
         body: JSON.stringify({ model_url }),
       })
       if (!res.ok) throw new Error("Failed to update")

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdminKey } from "@/lib/adminAuth"
+import { requireAdmin } from "@/lib/adminAuth"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = requireAdminKey(req)
+  const auth = await requireAdmin(req)
   if (auth) return auth
 
   try {

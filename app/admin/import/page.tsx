@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
+import { adminHeaders } from "@/lib/adminClient"
 
 const CATEGORIES = [
   { value: "sofa", label: "Sofa" },
@@ -88,7 +89,7 @@ export default function AdminImportPage() {
     try {
       const res = await fetch("/api/products", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await adminHeaders(),
         body: JSON.stringify({
           category: form.category,
           brand: form.brand || "IKEA",
@@ -156,7 +157,7 @@ export default function AdminImportPage() {
     try {
       const res = await fetch("/api/products/bulk", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await adminHeaders(),
         body: JSON.stringify({
           items,
           defaults: { source: "apify", brand: bulkBrand, category: bulkCategory },

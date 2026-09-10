@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { devProductsFallback, devOfflineFallbackEnabled, supabaseFailureLooksLikeNetwork } from "@/lib/devProductsFallback"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import { supabasePublic } from "@/lib/supabasePublic"
+import { requireAdmin } from "@/lib/adminAuth"
 
 const ALLOWED_CATEGORIES = ["sofa", "bed", "dining_table", "chair"] as const
 
@@ -12,6 +13,8 @@ function toNum(val: unknown): number | null {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdmin(req)
+  if (auth) return auth
   try {
     let body: Record<string, unknown>
     try {

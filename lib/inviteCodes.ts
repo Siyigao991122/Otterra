@@ -4,6 +4,7 @@ export interface InviteCode {
   id: string
   code: string
   label: string | null
+  email: string | null
   max_uses: number
   use_count: number
   revoked: boolean
@@ -22,12 +23,16 @@ function generateCode(length = 8): string {
 }
 
 /** Creates a new invite code, retrying on the rare random collision. */
-export async function createInviteCode(label: string | null, maxUses: number): Promise<InviteCode> {
+export async function createInviteCode(
+  label: string | null,
+  maxUses: number,
+  email: string | null = null
+): Promise<InviteCode> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateCode()
     const { data, error } = await supabaseAdmin
       .from("invite_codes")
-      .insert({ code, label, max_uses: maxUses })
+      .insert({ code, label, max_uses: maxUses, email })
       .select()
       .single()
 
@@ -44,6 +49,12 @@ export async function listInviteCodes(): Promise<InviteCode[]> {
     .order("created_at", { ascending: false })
   if (error) throw new Error(error.message)
   return (data ?? []) as InviteCode[]
+}
+
+export async function getInviteCode(id: string): Promise<InviteCode | null> {
+  const { data, error } = await supabaseAdmin.from("invite_codes").select().eq("id", id).maybeSingle()
+  if (error) throw new Error(error.message)
+  return (data as InviteCode | null) ?? null
 }
 
 export async function revokeInviteCode(id: string): Promise<void> {

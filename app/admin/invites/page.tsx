@@ -6,22 +6,19 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Copy, Loader2, Ban } from "lucide-react"
+import { ArrowLeft, Copy, Loader2, Ban, Mail, CheckCircle2 } from "lucide-react"
+import { adminHeaders } from "@/lib/adminClient"
 
 interface Invite {
   id: string
   code: string
   label: string | null
+  email: string | null
   max_uses: number
   use_count: number
   revoked: boolean
   created_at: string
   redeemed_at: string | null
-}
-
-const adminHeaders = {
-  "Content-Type": "application/json",
-  "x-admin-api-key": process.env.NEXT_PUBLIC_ADMIN_API_KEY ?? "",
 }
 
 function inviteStatus(invite: Invite): { label: string; className: string } {
@@ -33,16 +30,19 @@ function inviteStatus(invite: Invite): { label: string; className: string } {
 export default function AdminInvitesPage() {
   const [invites, setInvites] = useState<Invite[]>([])
   const [loading, setLoading] = useState(true)
+  const [email, setEmail] = useState("")
   const [label, setLabel] = useState("")
   const [maxUses, setMaxUses] = useState("1")
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [resendingId, setResendingId] = useState<string | null>(null)
 
   const loadInvites = async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/admin/invites", { headers: adminHeaders })
+      const res = await fetch("/api/admin/invites", { headers: await adminHeaders() })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Failed to load invites")
       setInvites(data.invites ?? [])
@@ -60,18 +60,26 @@ export default function AdminInvitesPage() {
   const handleCreate = async () => {
     setCreating(true)
     setError(null)
+    setNotice(null)
     try {
       const res = await fetch("/api/admin/invites", {
         method: "POST",
-        headers: adminHeaders,
+        headers: await adminHeaders(),
         body: JSON.stringify({
           label: label.trim() || undefined,
           maxUses: Number(maxUses) || 1,
+          email: email.trim() || undefined,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Failed to create invite")
       setInvites((prev) => [data.invite, ...prev])
+      if (data.emailError) {
+        setError(`Code created, but the email failed to send: ${data.emailError}. Copy it and send it yourself.`)
+      } else if (data.invite.email) {
+        setNotice(`Emailed to ${data.invite.email}.`)
+      }
+      setEmail("")
       setLabel("")
       setMaxUses("1")
     } catch (err) {
@@ -81,11 +89,30 @@ export default function AdminInvitesPage() {
     }
   }
 
+  const handleResend = async (invite: Invite) => {
+    setResendingId(invite.id)
+    setError(null)
+    setNotice(null)
+    try {
+      const res = await fetch(`/api/admin/invites/${invite.id}/resend`, {
+        method: "POST",
+        headers: await adminHeaders(),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || "Failed to resend email")
+      setNotice(`Resent to ${invite.email}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resend email")
+    } finally {
+      setResendingId(null)
+    }
+  }
+
   const handleRevoke = async (id: string) => {
     try {
       const res = await fetch(`/api/admin/invites/${id}`, {
         method: "PATCH",
-        headers: adminHeaders,
+        headers: await adminHeaders(),
         body: JSON.stringify({ revoked: true }),
       })
       if (!res.ok) throw new Error("Failed to revoke")
@@ -118,8 +145,18 @@ export default function AdminInvitesPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-3 items-end flex-wrap">
-            <div className="flex-1 min-w-[200px]">
-              <Label htmlFor="label">Label (optional, e.g. who it's for)</Label>
+            <div className="flex-1 min-w-[220px]">
+              <Label htmlFor="invite-email">Email (optional — emails the code automatically)</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="jane@example.com"
+              />
+            </div>
+            <div className="flex-1 min-w-[160px]">
+              <Label htmlFor="label">Label (optional)</Label>
               <Input id="label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Jane" />
             </div>
             <div className="w-28">
@@ -134,9 +171,15 @@ export default function AdminInvitesPage() {
             </div>
             <Button onClick={handleCreate} disabled={creating}>
               {creating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Generate
+              Generate{email.trim() ? " & email" : ""}
             </Button>
           </div>
+          {notice && (
+            <p className="flex items-center gap-1.5 text-sm text-primary">
+              <CheckCircle2 className="w-4 h-4" />
+              {notice}
+            </p>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>
@@ -173,13 +216,29 @@ export default function AdminInvitesPage() {
                         {copiedId === invite.id && <span className="text-xs text-primary">Copied</span>}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {invite.label ? `${invite.label} · ` : ""}
+                        {invite.email ? `${invite.email} · ` : invite.label ? `${invite.label} · ` : ""}
                         {invite.use_count}/{invite.max_uses} used
                         {invite.redeemed_at ? ` · first used ${new Date(invite.redeemed_at).toLocaleDateString()}` : ""}
                       </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <span className={`text-xs font-medium ${status.className}`}>{status.label}</span>
+                      {invite.email && !invite.revoked && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleResend(invite)}
+                          disabled={resendingId === invite.id}
+                          className="gap-1.5 text-muted-foreground"
+                        >
+                          {resendingId === invite.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Mail className="w-3.5 h-3.5" />
+                          )}
+                          Resend
+                        </Button>
+                      )}
                       {!invite.revoked && (
                         <Button variant="ghost" size="sm" onClick={() => handleRevoke(invite.id)} className="gap-1.5 text-muted-foreground">
                           <Ban className="w-3.5 h-3.5" />

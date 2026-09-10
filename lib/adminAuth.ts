@@ -1,35 +1,26 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server"
+import { supabaseAdmin } from "@/lib/supabaseAdmin"
 
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
+function allowedAdminEmails(): Set<string> {
+  const configured = process.env.ADMIN_EMAILS ?? process.env.ADMIN_EMAIL ?? ""
+  return new Set(configured.split(",").map((email) => email.trim().toLowerCase()).filter(Boolean))
+}
 
-/**
- * Validates the request has a valid admin API key (via Authorization: Bearer <key> or x-admin-api-key header).
- * Returns null if valid, or a NextResponse to return if invalid.
- */
-export function requireAdminKey(
-  request: NextRequest
-): NextResponse | null {
-  if (!ADMIN_API_KEY) {
-    return NextResponse.json(
-      { error: "Admin API key not configured" },
-      { status: 500 }
-    );
+/** Verifies a Supabase Google session and checks the server-only email allowlist. */
+export async function requireAdmin(request: NextRequest): Promise<NextResponse | null> {
+  const allowed = allowedAdminEmails()
+  if (allowed.size === 0) {
+    return NextResponse.json({ error: "Admin email allowlist is not configured." }, { status: 500 })
   }
 
-  const authHeader = request.headers.get("authorization");
-  const bearerKey = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice(7)
-    : null;
-  const headerKey = request.headers.get("x-admin-api-key");
+  const authorization = request.headers.get("authorization")
+  const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : ""
+  if (!token) return NextResponse.json({ error: "Please sign in as an administrator." }, { status: 401 })
 
-  const providedKey = bearerKey ?? headerKey;
-
-  if (!providedKey || providedKey !== ADMIN_API_KEY) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401 }
-    );
+  const { data, error } = await supabaseAdmin.auth.getUser(token)
+  const email = data.user?.email?.toLowerCase()
+  if (error || !email || !allowed.has(email)) {
+    return NextResponse.json({ error: "This Google account is not authorized for admin access." }, { status: 403 })
   }
-
-  return null;
+  return null
 }
