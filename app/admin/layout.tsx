@@ -39,7 +39,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       })
       if (error) throw error
       setCodeSent(true)
-      setMessage("A 6-digit code was sent to your email.")
+      setMessage("A one-time code was sent to your email.")
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not send the code. Please try again.")
     } finally {
@@ -92,24 +92,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </label>
             {codeSent && (
               <label className="block space-y-1.5 text-sm">
-                <span>6-digit code</span>
+                <span>Verification code</span>
                 <input
                   className="h-10 w-full rounded-md border bg-background px-3 text-center font-mono text-lg tracking-[0.3em]"
                   type="text"
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  maxLength={6}
+                  maxLength={10}
                   value={code}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 10))}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && code.length === 6) void verifyCode()
+                    if (event.key === "Enter" && code.length >= 6) void verifyCode()
                   }}
                 />
               </label>
             )}
             {codeSent ? (
               <div className="space-y-2">
-                <Button className="w-full" onClick={verifyCode} disabled={verifying || code.length !== 6}>
+                <Button className="w-full" onClick={verifyCode} disabled={verifying || code.length < 6}>
                   {verifying ? "Verifying…" : "Verify and sign in"}
                 </Button>
                 <Button variant="ghost" className="w-full" onClick={() => { setCodeSent(false); setCode(""); setMessage(null) }}>
