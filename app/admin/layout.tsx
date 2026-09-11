@@ -12,7 +12,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
   const [email, setEmail] = useState("sgao@ucsd.edu")
+  const [code, setCode] = useState("")
+  const [codeSent, setCodeSent] = useState(false)
   const [sending, setSending] = useState(false)
+  const [verifying, setVerifying] = useState(false)
 
   useEffect(() => {
     supabaseBrowser.auth.getSession().then(({ data }) => {
@@ -29,15 +32,36 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const signIn = async () => {
     setMessage(null)
     setSending(true)
-    const { error } = await supabaseBrowser.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/admin/invites`,
-        shouldCreateUser: true,
-      },
-    })
-    setSending(false)
-    setMessage(error ? error.message : "Check your email and click the secure sign-in link.")
+    try {
+      const { error } = await supabaseBrowser.auth.signInWithOtp({
+        email: email.trim(),
+        options: { shouldCreateUser: true },
+      })
+      if (error) throw error
+      setCodeSent(true)
+      setMessage("A 6-digit code was sent to your email.")
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not send the code. Please try again.")
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const verifyCode = async () => {
+    setMessage(null)
+    setVerifying(true)
+    try {
+      const { error } = await supabaseBrowser.auth.verifyOtp({
+        email: email.trim(),
+        token: code.trim(),
+        type: "email",
+      })
+      if (error) throw error
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "That code is invalid or expired.")
+    } finally {
+      setVerifying(false)
+    }
   }
 
   if (loading) return <div className="min-h-screen grid place-items-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
@@ -48,7 +72,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Otterra Admin</CardTitle>
-            <CardDescription>We will email a secure sign-in link to an authorized administrator.</CardDescription>
+            <CardDescription>We will email a one-time code to an authorized administrator.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <label className="block space-y-1.5 text-sm">
@@ -57,14 +81,47 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 className="h-10 w-full rounded-md border bg-background px-3"
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value)
+                  setCodeSent(false)
+                  setCode("")
+                }}
                 autoComplete="email"
+                disabled={codeSent}
               />
             </label>
-            <Button className="w-full" onClick={signIn} disabled={sending || !email.trim()}>
-              {sending ? "Sending…" : "Email me a sign-in link"}
-            </Button>
-            {message && <p className="text-sm text-destructive">{message}</p>}
+            {codeSent && (
+              <label className="block space-y-1.5 text-sm">
+                <span>6-digit code</span>
+                <input
+                  className="h-10 w-full rounded-md border bg-background px-3 text-center font-mono text-lg tracking-[0.3em]"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && code.length === 6) void verifyCode()
+                  }}
+                />
+              </label>
+            )}
+            {codeSent ? (
+              <div className="space-y-2">
+                <Button className="w-full" onClick={verifyCode} disabled={verifying || code.length !== 6}>
+                  {verifying ? "Verifying…" : "Verify and sign in"}
+                </Button>
+                <Button variant="ghost" className="w-full" onClick={() => { setCodeSent(false); setCode(""); setMessage(null) }}>
+                  Use a different email
+                </Button>
+              </div>
+            ) : (
+              <Button className="w-full" onClick={signIn} disabled={sending || !email.trim()}>
+                {sending ? "Sending…" : "Email me a code"}
+              </Button>
+            )}
+            {message && <p className="text-sm text-muted-foreground">{message}</p>}
           </CardContent>
         </Card>
       </main>
